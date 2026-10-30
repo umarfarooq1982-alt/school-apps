@@ -25,6 +25,9 @@ const common: Record<string, string> = {
     'جی آر نمبر کے ساتھ ٹائم ٹیبل، ہوم ورک اور نتائج',
   'Attendance, diary, marks and your classes':
     'حاضری، ڈائری، نمبر اور آپ کی کلاسیں',
+  'School admin / Owner': 'اسکول ایڈمن / مالک',
+  'Owner, Principal, Accounts, HR, Exam and all staff panels':
+    'مالک، پرنسپل، اکاؤنٹس، ایچ آر، امتحان اور تمام عملہ پینلز',
   'Sign in': 'سائن ان',
   'Sign out': 'سائن آؤٹ',
   Password: 'پاس ورڈ',

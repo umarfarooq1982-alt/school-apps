@@ -14,6 +14,7 @@ import { sharedScreens } from '../src/screens/shared';
 import { parentScreens } from '../src/screens/parent';
 import { studentScreens } from '../src/screens/student';
 import { teacherScreens } from '../src/screens/teacher';
+import { adminScreens } from '../src/screens/admin';
 import { clearShared, Role, setShared } from '../src/store';
 
 type Case = { role: Role | null; name: string; lang: 'en' | 'ur' };
@@ -26,11 +27,13 @@ const add = (map: object, roles: Array<Role | null>) =>
     ),
   );
 add(authScreens, [null]);
-add(commonScreens, ['parent', 'student', 'teacher']);
+add(commonScreens, ['parent', 'student', 'teacher', 'admin']);
 add(sharedScreens, ['parent', 'student']);
 add(parentScreens, ['parent']);
 add(studentScreens, ['student']);
 add(teacherScreens, ['teacher']);
+// Admin screens run in English only (the admin panel is not translated).
+Object.keys(adminScreens).forEach(name => cases.push({ role: 'admin', name, lang: 'en' }));
 
 let errors: string[] = [];
 
@@ -50,8 +53,35 @@ afterAll(() => {
   jest.useRealTimers();
 });
 
+declare const __dirname: string;
+
 test('every route used by the app is registered', () => {
-  expect(Object.keys(screens).length).toBeGreaterThan(60);
+  const fs = require('fs');
+  const path = require('path');
+  const files: string[] = [];
+  const walk = (d: string) =>
+    fs.readdirSync(d).forEach((f: string) => {
+      const p = path.join(d, f);
+      if (fs.statSync(p).isDirectory()) {
+        walk(p);
+      } else if (/\.tsx?$/.test(f)) {
+        files.push(p);
+      }
+    });
+  walk(path.join(__dirname, '..', 'src'));
+  const source = files.map(f => fs.readFileSync(f, 'utf8')).join('\n');
+  const used = new Set<string>();
+  const navCall =
+    /(?:nav\.(?:push|replace|reset|popTo)|(?<![.\w])open)\(\s*'([A-Z][A-Za-z]+)'/g;
+  for (const m of source.matchAll(navCall)) {
+    used.add(m[1]);
+  }
+  for (const m of source.matchAll(/route: '([A-Z][A-Za-z]+)'/g)) {
+    used.add(m[1]);
+  }
+  const missing = [...used].filter(name => !screens[name]);
+  expect(missing).toEqual([]);
+  expect(used.size).toBeGreaterThan(150);
 });
 
 test.each(cases)('$name as $role ($lang)', async ({ role, name, lang }) => {

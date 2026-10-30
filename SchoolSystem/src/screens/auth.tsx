@@ -8,6 +8,7 @@ import {
   GraduationCap,
   Lock,
   Phone,
+  ShieldCheck,
   User,
   Users,
   WifiOff,
@@ -33,6 +34,7 @@ export const HOME_ROUTE: Record<Role, string> = {
   parent: 'ParentTabs',
   student: 'StudentTabs',
   teacher: 'TeacherTabs',
+  admin: 'AdminTabs',
 };
 
 // Demo credentials until the API is connected.
@@ -43,7 +45,7 @@ const MAX_FAILS = 5;
 const LOCK_MS = 15 * 60 * 1000;
 const guards: Record<string, { fails: number; until: number }> = {};
 
-function checkLogin(key: string, ok: boolean): boolean {
+export function checkLogin(key: string, ok: boolean): boolean {
   const g = (guards[key] ??= { fails: 0, until: 0 });
   const now = Date.now();
   if (g.until > now) {
@@ -131,6 +133,13 @@ function RoleSelect() {
       sub: 'Attendance, diary, marks and your classes',
       icon: Briefcase,
       route: 'TeacherSignIn',
+    },
+    {
+      key: 'admin',
+      title: 'School admin / Owner',
+      sub: 'Owner, Principal, Accounts, HR, Exam and all staff panels',
+      icon: ShieldCheck,
+      route: 'AdminSignIn',
     },
   ];
   return (

@@ -60,7 +60,7 @@ export function clearShared(keep: string[] = []) {
   });
 }
 
-export type Role = 'parent' | 'student' | 'teacher';
+export type Role = 'parent' | 'student' | 'teacher' | 'admin';
 
 export function useSession() {
   const [role, setRole] = useShared<Role | null>('session.role', null);

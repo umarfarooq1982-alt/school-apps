@@ -5,6 +5,7 @@ import { sharedScreens } from './shared';
 import { parentScreens } from './parent';
 import { studentScreens } from './student';
 import { teacherScreens } from './teacher';
+import { adminScreens } from './admin';
 
 export const screens: ScreenMap = {
   ...authScreens,
@@ -13,4 +14,5 @@ export const screens: ScreenMap = {
   ...parentScreens,
   ...studentScreens,
   ...teacherScreens,
+  ...adminScreens,
 };

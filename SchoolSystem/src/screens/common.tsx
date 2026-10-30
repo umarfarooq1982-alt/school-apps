@@ -22,6 +22,14 @@ const TEACHER_PUSH = [
   { text: 'Salary slip for September is ready', when: '1 Oct' },
 ];
 
+const ADMIN_PUSH = [
+  { text: '5 approvals are waiting: admission, discount, fine waiver, leave, result', when: 'now' },
+  { text: 'Collection today Rs. 682,400 across 3 campuses', when: '1:45' },
+  { text: '2 teachers absent today; 5 periods need substitutes', when: '8:05' },
+  { text: 'Low stock: uniform shirt size 28 (6 left)', when: 'Yesterday' },
+  { text: 'Vehicle LEA-4512 fitness certificate expires in 12 days', when: 'Mon' },
+];
+
 // Push notifications, shown the way they appear on the phone lock screen.
 function Notifications() {
   const nav = useNav();
@@ -29,7 +37,9 @@ function Notifications() {
   const { role } = useSession();
   const { t } = useI18n();
   const items =
-    role === 'teacher'
+    role === 'admin'
+      ? ADMIN_PUSH
+      : role === 'teacher'
       ? TEACHER_PUSH
       : role === 'student'
       ? STUDENT_PUSH
