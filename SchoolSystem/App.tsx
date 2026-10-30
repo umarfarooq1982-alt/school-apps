@@ -1,45 +1,28 @@
-/**
- * Sample React Native App
- * https://github.com/facebook/react-native
- *
- * @format
- */
-
-import { NewAppScreen } from '@react-native/new-app-screen';
-import { StatusBar, StyleSheet, useColorScheme, View } from 'react-native';
-import {
-  SafeAreaProvider,
-  useSafeAreaInsets,
-} from 'react-native-safe-area-context';
+import React from 'react';
+import { StatusBar, StyleSheet, View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { Navigator } from './src/navigation';
+import { screens } from './src/screens';
+import { useI18n } from './src/i18n';
+import { colors } from './src/theme';
 
 function App() {
-  const isDarkMode = useColorScheme() === 'dark';
-
+  const { isRTL } = useI18n();
   return (
     <SafeAreaProvider>
-      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
-      <AppContent />
+      <StatusBar barStyle="dark-content" />
+      {/* Urdu flips the whole layout right-to-left without restarting the app. */}
+      <View style={[styles.root, isRTL ? styles.rtl : styles.ltr]}>
+        <Navigator screens={screens} initial="RoleSelect" />
+      </View>
     </SafeAreaProvider>
   );
 }
 
-function AppContent() {
-  const safeAreaInsets = useSafeAreaInsets();
-
-  return (
-    <View style={styles.container}>
-      <NewAppScreen
-        templateFileName="App.tsx"
-        safeAreaInsets={safeAreaInsets}
-      />
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  root: { flex: 1, backgroundColor: colors.bg },
+  rtl: { direction: 'rtl' },
+  ltr: { direction: 'ltr' },
 });
 
 export default App;

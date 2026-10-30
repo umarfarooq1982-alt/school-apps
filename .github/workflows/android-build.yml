@@ -38,6 +38,12 @@ jobs:
       - name: Type check
         run: npx tsc --noEmit
 
+      - name: Lint
+        run: npx eslint App.tsx src
+
+      - name: Screen smoke tests
+        run: npx jest --ci
+
       - name: Build release APK
         working-directory: SchoolSystem/android
         run: |
