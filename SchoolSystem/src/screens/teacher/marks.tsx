@@ -39,11 +39,14 @@ export function TeacherMarks() {
   const invalid = STUDENTS_5A.filter(s => isInvalid(marks[s.id] ?? ''));
   const blank = values.filter(v => v.trim() === '').length;
 
+  // SOW M-12: once submitted the marks are locked; only the Exam Controller
+  // can unlock them.
   const set = (id: string, v: string) => {
-    setMarks(p => ({ ...p, [id]: v }));
     if (complete) {
-      setComplete(false);
+      toast('Marks are locked. Ask the Exam Controller to unlock.');
+      return;
     }
+    setMarks(p => ({ ...p, [id]: v }));
   };
 
   const saveDraft = () => {
@@ -121,6 +124,7 @@ export function TeacherMarks() {
                     placeholderTextColor={colors.text}
                     keyboardType="numbers-and-punctuation"
                     maxLength={5}
+                    editable={!complete}
                     style={[s.input, bad && s.inputBad]}
                   />
                 </View>
@@ -145,7 +149,7 @@ export function TeacherMarks() {
         />
       )}
       {complete ? (
-        <InfoBanner tone="success" text="Marks are complete and locked for review." />
+        <InfoBanner tone="success" text="Marks are submitted and locked. Only the Exam Controller can unlock them." />
       ) : null}
     </Screen>
   );

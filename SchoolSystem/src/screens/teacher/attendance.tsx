@@ -229,8 +229,14 @@ export function TeacherAttendance() {
   const [, setQueue] = useQueue();
   const [, setMarked] = useAttendanceMarked();
   const c = counts(marks);
+  // SOW M-07: changes to a past day are corrections and need the Principal.
+  const isCorrection = date !== ATT_DATES[0];
 
   const save = () => {
+    if (isCorrection) {
+      toast(`Correction for ${date} sent to the Principal for approval.`);
+      return;
+    }
     if (offline) {
       setQueue(q => [
         {
@@ -257,6 +263,13 @@ export function TeacherAttendance() {
   const daily = (
     <>
       {offline ? <OfflineBanner /> : null}
+      {isCorrection ? (
+        <InfoBanner
+          tone="warn"
+          icon={Clock}
+          text="This day is past the 10:00 cut-off. Changes go to the Principal as a correction request."
+        />
+      ) : null}
       <HStack gap={8}>
         <StatTile value={c.P} label="Present" />
         <StatTile value={c.A} label="Absent" />
@@ -289,7 +302,9 @@ export function TeacherAttendance() {
           <Button
             icon={Check}
             label={
-              offline
+              isCorrection
+                ? 'Send correction to Principal'
+                : offline
                 ? 'Save on phone'
                 : `Save · parents of ${c.A} absent get SMS`
             }

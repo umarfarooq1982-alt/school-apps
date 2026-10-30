@@ -100,6 +100,16 @@ const common: Record<string, string> = {
   'Saved (demo)': 'محفوظ ہو گیا (ڈیمو)',
   'Downloaded (demo)': 'ڈاؤن لوڈ ہو گیا (ڈیمو)',
   'Sent (demo)': 'بھیج دیا گیا (ڈیمو)',
+
+  // Fee hold on admit card / report card
+  'Admit card is on hold': 'ایڈمٹ کارڈ روک دیا گیا ہے',
+  'Report card is on hold': 'رپورٹ کارڈ روک دیا گیا ہے',
+  'Fee of': 'فیس',
+  'is due. It opens as soon as the dues are cleared.':
+    'واجب الادا ہے۔ واجبات ادا ہوتے ہی یہ کھل جائے گا۔',
+  'Pay fee now': 'ابھی فیس ادا کریں',
+  'Ask your parent to pay the fee from the parent app.':
+    'اپنے والدین سے کہیں کہ پیرنٹ ایپ سے فیس ادا کریں۔',
 };
 
 export default common;

@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import {
   ArrowLeftRight,
+  Banknote,
   CalendarDays,
   Clock,
   Download,
@@ -9,6 +10,7 @@ import {
   Flag,
   GraduationCap,
   Image as ImageIcon,
+  Lock,
   Paperclip,
   Star,
   TriangleAlert,
@@ -22,6 +24,7 @@ import {
   Card,
   Chips,
   DayStatus,
+  formatRs,
   HeroCard,
   HeroPill,
   IconButton,
@@ -61,6 +64,7 @@ import {
   TT_TIMES,
 } from '../../data/school';
 import { useCurrentChild } from '../../data/useChild';
+import { useChildFee } from './fee';
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -621,9 +625,53 @@ function DownloadButton() {
   );
 }
 
+// SOW M-03/M-12: admit cards and report cards are held while fee is due.
+function FeeHold({ what }: { what: string }) {
+  const nav = useNav();
+  const { role } = useSession();
+  const { t } = useI18n();
+  const child = useCurrentChild();
+  const { due, vouchers } = useChildFee(child);
+  const unpaid = vouchers.find(v => v.status === 'Unpaid');
+  return (
+    <>
+      <Card style={s.holdCard}>
+        <View style={s.holdIcon}>
+          <Lock size={26} color={colors.danger} />
+        </View>
+        <Text style={s.holdTitle}>{t(`${what} is on hold`)}</Text>
+        <Text style={s.holdText}>
+          {t('Fee of')} {formatRs(due)} {t('is due. It opens as soon as the dues are cleared.')}
+        </Text>
+      </Card>
+      {role === 'parent' && unpaid ? (
+        <Button
+          label="Pay fee now"
+          icon={Banknote}
+          onPress={() => nav.push('ParentVoucher', { id: unpaid.id })}
+        />
+      ) : (
+        <InfoBanner
+          tone="warn"
+          icon={TriangleAlert}
+          text={t('Ask your parent to pay the fee from the parent app.')}
+        />
+      )}
+    </>
+  );
+}
+
 export function AdmitCardScreen(_: ScreenProps) {
   const child = useCurrentChild();
   const { t } = useI18n();
+  const { due } = useChildFee(child);
+  if (due > 0) {
+    return (
+      <Screen title="Admit card" subtitle="Final term 2026">
+        <FeeHold what="Admit card" />
+      </Screen>
+    );
+  }
   return (
     <Screen title="Admit card" subtitle="Final term 2026" right={<DownloadButton />}>
       <Card>
@@ -655,6 +703,14 @@ export function AdmitCardScreen(_: ScreenProps) {
 export function ReportCardScreen(_: ScreenProps) {
   const child = useCurrentChild();
   const { t } = useI18n();
+  const { due } = useChildFee(child);
+  if (due > 0) {
+    return (
+      <Screen title="Report card" subtitle="Mid-term 2026">
+        <FeeHold what="Report card" />
+      </Screen>
+    );
+  }
   return (
     <Screen
       title="Report card"
@@ -711,6 +767,22 @@ export function ReportCardScreen(_: ScreenProps) {
 }
 
 const s = StyleSheet.create({
+  holdCard: { alignItems: 'center', gap: 8, paddingVertical: 22 },
+  holdIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: colors.dangerSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  holdTitle: { fontSize: 17, fontWeight: '800', color: colors.text },
+  holdText: {
+    fontSize: 13.5,
+    color: colors.textMuted,
+    textAlign: 'center',
+    lineHeight: 19,
+  },
   flex: { flex: 1 },
   stats: { flexDirection: 'row', gap: 6 },
   empty: { fontSize: 13, color: colors.textMuted, paddingVertical: 8 },

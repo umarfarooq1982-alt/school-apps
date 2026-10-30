@@ -35,6 +35,37 @@ export const HOME_ROUTE: Record<Role, string> = {
   teacher: 'TeacherTabs',
 };
 
+// Demo credentials until the API is connected.
+export const DEMO_CODE = '123456';
+
+// SOW 7.4: the account locks for 15 minutes after 5 failed logins.
+const MAX_FAILS = 5;
+const LOCK_MS = 15 * 60 * 1000;
+const guards: Record<string, { fails: number; until: number }> = {};
+
+function checkLogin(key: string, ok: boolean): boolean {
+  const g = (guards[key] ??= { fails: 0, until: 0 });
+  const now = Date.now();
+  if (g.until > now) {
+    const mins = Math.ceil((g.until - now) / 60000);
+    toast(`Account locked. Try again in ${mins} min.`);
+    return false;
+  }
+  if (ok) {
+    g.fails = 0;
+    return true;
+  }
+  g.fails += 1;
+  if (g.fails >= MAX_FAILS) {
+    g.fails = 0;
+    g.until = now + LOCK_MS;
+    toast('5 wrong attempts. The account is locked for 15 minutes.');
+  } else {
+    toast(`Wrong code or password. ${MAX_FAILS - g.fails} attempts left.`);
+  }
+  return false;
+}
+
 function useEnter() {
   const nav = useNav();
   const { signIn } = useSession();
@@ -151,7 +182,7 @@ function ParentSignIn() {
       nav.push('ParentOtp', { mobile: `+92 ${mobile}` });
     } else if (password.length < 6) {
       toast('Password must be at least 6 characters');
-    } else {
+    } else if (checkLogin('parent', password === DEMO_CODE)) {
       enter('parent');
     }
   };
@@ -190,7 +221,7 @@ function ParentSignIn() {
         onPress={submit}
       />
       <ForgotLink onPress={() => nav.push('ParentReset')} />
-      <InfoBanner text="Demo: any 6-digit code or 6+ character password works." />
+      <InfoBanner text={`Demo: the SMS code and the password are ${DEMO_CODE}.`} />
     </Screen>
   );
 }
@@ -231,15 +262,17 @@ function ParentOtp() {
   const { t } = useI18n();
   const [code, setCode] = useState('');
   const [left, restart] = useCountdown(42);
-  const [attempts, setAttempts] = useState(0);
 
   const verify = () => {
     if (code.length !== 6) {
-      setAttempts(a => a + 1);
       toast('Enter all 6 digits');
       return;
     }
-    enter('parent');
+    if (checkLogin('parent', code === DEMO_CODE)) {
+      enter('parent');
+    } else {
+      setCode('');
+    }
   };
 
   return (
@@ -268,9 +301,7 @@ function ParentOtp() {
       )}
       <InfoBanner
         icon={Lock}
-        text={`After 5 wrong attempts the account locks for 15 minutes.${
-          attempts ? ` Attempts: ${attempts}/5` : ''
-        }`}
+        text={`After 5 wrong attempts the account locks for 15 minutes. Demo code: ${DEMO_CODE}`}
       />
     </Screen>
   );
@@ -352,6 +383,7 @@ function ParentReset() {
 // ---------- Student ----------
 
 let studentPasswordSet = false;
+let studentPassword = DEMO_CODE; // the school's first password
 
 function StudentSignIn() {
   const nav = useNav();
@@ -363,6 +395,8 @@ function StudentSignIn() {
       toast('Enter your GR No.');
     } else if (pw.length < 6) {
       toast('Password must be at least 6 characters');
+    } else if (!checkLogin('student', pw === studentPassword)) {
+      return;
     } else if (!studentPasswordSet) {
       nav.push('StudentSetPassword', { current: pw });
     } else {
@@ -374,7 +408,7 @@ function StudentSignIn() {
       footer={
         <InfoBanner
           icon={Lock}
-          text="First sign-in asks you to set your own password."
+          text={`First sign-in asks you to set your own password. Demo first password: ${DEMO_CODE}`}
         />
       }
     >
@@ -422,6 +456,7 @@ function StudentSetPassword() {
       toast('Passwords do not match');
     } else {
       studentPasswordSet = true;
+      studentPassword = pw;
       toast('Password saved');
       enter('student');
     }
@@ -491,7 +526,7 @@ function TeacherSignIn() {
       toast('Enter your email or mobile');
     } else if (pw.length < 6) {
       toast('Password must be at least 6 characters');
-    } else {
+    } else if (checkLogin('teacher', pw === DEMO_CODE)) {
       enter('teacher');
     }
   };
@@ -500,7 +535,7 @@ function TeacherSignIn() {
       footer={
         <InfoBanner
           icon={WifiOff}
-          text="Attendance works without internet and uploads later."
+          text={`Attendance works without internet and uploads later. Demo password: ${DEMO_CODE}`}
         />
       }
     >
