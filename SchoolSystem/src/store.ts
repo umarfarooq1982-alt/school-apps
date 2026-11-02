@@ -60,12 +60,33 @@ export function clearShared(keep: string[] = []) {
   });
 }
 
+// Removes every value whose key starts with `prefix` (e.g. cached API data).
+export function clearSharedPrefix(prefix: string) {
+  Array.from(values.keys())
+    .filter(k => k.startsWith(prefix))
+    .forEach(k => {
+      values.delete(k);
+      emit(k);
+    });
+}
+
 export type Role = 'parent' | 'student' | 'teacher' | 'admin';
+
+// The API layer registers a sign-out that also ends the server session and
+// clears the saved token (kept here to avoid an import cycle).
+let signOutHook: (() => void) | null = null;
+export function setSignOutHook(fn: (() => void) | null) {
+  signOutHook = fn;
+}
 
 export function useSession() {
   const [role, setRole] = useShared<Role | null>('session.role', null);
   const signIn = useCallback((r: Role) => setRole(r), [setRole]);
   const signOut = useCallback(() => {
+    if (signOutHook) {
+      signOutHook();
+      return;
+    }
     clearShared(['session.lang']);
     setShared('session.role', null);
   }, []);

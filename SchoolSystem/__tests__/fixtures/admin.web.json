@@ -1,0 +1,2433 @@
+{
+ "/api/web/academic": {
+  "status": 200,
+  "message": "Success",
+  "data": {
+   "sessions": [
+    {
+     "id": "3",
+     "name": "2026-27",
+     "start": "2026-04-01",
+     "end": "2027-03-31",
+     "isCurrent": true,
+     "isClosed": false
+    }
+   ],
+   "subjects": [
+    {
+     "id": "7",
+     "code": "ENG",
+     "name": "English",
+     "type": "Core"
+    },
+    {
+     "id": "8",
+     "code": "MTH",
+     "name": "Mathematics",
+     "type": "Core"
+    },
+    {
+     "id": "9",
+     "code": "URD",
+     "name": "Urdu",
+     "type": "Core"
+    }
+   ],
+   "classes": [
+    {
+     "id": "10",
+     "name": "Playgroup",
+     "sortOrder": 0,
+     "sections": [
+      {
+       "id": "15",
+       "name": "A",
+       "capacity": 40,
+       "room": null,
+       "teacherId": null
+      }
+     ]
+    },
+    {
+     "id": "11",
+     "name": "Nursery",
+     "sortOrder": 1,
+     "sections": [
+      {
+       "id": "16",
+       "name": "A",
+       "capacity": 40,
+       "room": null,
+       "teacherId": null
+      }
+     ]
+    },
+    {
+     "id": "12",
+     "name": "Prep",
+     "sortOrder": 2,
+     "sections": [
+      {
+       "id": "17",
+       "name": "A",
+       "capacity": 40,
+       "room": null,
+       "teacherId": null
+      }
+     ]
+    },
+    {
+     "id": "13",
+     "name": "Class 1",
+     "sortOrder": 3,
+     "sections": [
+      {
+       "id": "18",
+       "name": "A",
+       "capacity": 40,
+       "room": null,
+       "teacherId": null
+      }
+     ]
+    },
+    {
+     "id": "14",
+     "name": "Class 2",
+     "sortOrder": 4,
+     "sections": [
+      {
+       "id": "19",
+       "name": "A",
+       "capacity": 40,
+       "room": null,
+       "teacherId": null
+      }
+     ]
+    },
+    {
+     "id": "15",
+     "name": "Class 3",
+     "sortOrder": 5,
+     "sections": [
+      {
+       "id": "20",
+       "name": "A",
+       "capacity": 40,
+       "room": null,
+       "teacherId": null
+      }
+     ]
+    },
+    {
+     "id": "16",
+     "name": "Class 4",
+     "sortOrder": 6,
+     "sections": [
+      {
+       "id": "21",
+       "name": "A",
+       "capacity": 40,
+       "room": null,
+       "teacherId": null
+      }
+     ]
+    },
+    {
+     "id": "17",
+     "name": "Class 5",
+     "sortOrder": 7,
+     "sections": [
+      {
+       "id": "22",
+       "name": "A",
+       "capacity": 40,
+       "room": null,
+       "teacherId": null
+      }
+     ]
+    },
+    {
+     "id": "18",
+     "name": "Class 6",
+     "sortOrder": 8,
+     "sections": [
+      {
+       "id": "23",
+       "name": "A",
+       "capacity": 40,
+       "room": null,
+       "teacherId": null
+      }
+     ]
+    },
+    {
+     "id": "19",
+     "name": "Class 7",
+     "sortOrder": 9,
+     "sections": [
+      {
+       "id": "24",
+       "name": "A",
+       "capacity": 40,
+       "room": null,
+       "teacherId": null
+      }
+     ]
+    },
+    {
+     "id": "20",
+     "name": "Class 8",
+     "sortOrder": 10,
+     "sections": [
+      {
+       "id": "25",
+       "name": "A",
+       "capacity": 40,
+       "room": null,
+       "teacherId": null
+      }
+     ]
+    },
+    {
+     "id": "21",
+     "name": "Class 9",
+     "sortOrder": 11,
+     "sections": [
+      {
+       "id": "26",
+       "name": "A",
+       "capacity": 40,
+       "room": null,
+       "teacherId": null
+      }
+     ]
+    },
+    {
+     "id": "22",
+     "name": "Class 10",
+     "sortOrder": 12,
+     "sections": [
+      {
+       "id": "27",
+       "name": "A",
+       "capacity": 40,
+       "room": null,
+       "teacherId": null
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "/api/web/academic/teaching": {
+  "status": 200,
+  "message": "Success",
+  "data": [
+   {
+    "id": 1,
+    "staff_id": 9,
+    "class_id": 17,
+    "section": "A",
+    "subject_id": 7,
+    "Staff": {
+     "id": 9,
+     "uuid": "f0b51517-2d04-47da-828e-a5a8bdc67ba0",
+     "school_id": 3,
+     "campus_id": 4,
+     "emp_id": "EMP-0001",
+     "name": "Sadia Anwar (Test)",
+     "cnic": "35202-5551212-4",
+     "mobile": "0300-5551212",
+     "email": "sadia.test@sbs.local",
+     "dob": null,
+     "emergency_phone": null,
+     "address": null,
+     "qualification": null,
+     "experience": null,
+     "designation": "Teacher",
+     "department": "Academics",
+     "join_date": "2024-04-01",
+     "employment_type": "Permanent",
+     "probation_end": null,
+     "contract_end": null,
+     "basic_salary": "54000.00",
+     "allowances": "0.00",
+     "status": "active",
+     "photo_url": null,
+     "deleted_at": null,
+     "created_at": "2026-11-02T20:14:45.000Z",
+     "updated_at": "2026-11-02T20:14:45.000Z"
+    },
+    "Class": {
+     "id": 17,
+     "uuid": "2ac2efbf-41dc-470f-9eee-42328a06c067",
+     "school_id": 3,
+     "campus_id": 4,
+     "session_id": 3,
+     "name": "Class 5",
+     "sort_order": 7,
+     "is_active": true,
+     "deleted_at": null,
+     "created_at": "2026-10-29T12:30:24.000Z",
+     "updated_at": "2026-10-29T12:30:24.000Z"
+    },
+    "Subject": {
+     "id": 7,
+     "uuid": "0ef5df40-e6b0-457f-a09e-8a540c36ccf6",
+     "school_id": 3,
+     "code": "ENG",
+     "name": "English",
+     "type": "Core",
+     "theory_prac": "Theory",
+     "is_active": true,
+     "created_at": "2026-11-02T20:14:44.000Z",
+     "updated_at": "2026-11-02T20:14:44.000Z"
+    }
+   },
+   {
+    "id": 2,
+    "staff_id": 9,
+    "class_id": 17,
+    "section": "A",
+    "subject_id": 8,
+    "Staff": {
+     "id": 9,
+     "uuid": "f0b51517-2d04-47da-828e-a5a8bdc67ba0",
+     "school_id": 3,
+     "campus_id": 4,
+     "emp_id": "EMP-0001",
+     "name": "Sadia Anwar (Test)",
+     "cnic": "35202-5551212-4",
+     "mobile": "0300-5551212",
+     "email": "sadia.test@sbs.local",
+     "dob": null,
+     "emergency_phone": null,
+     "address": null,
+     "qualification": null,
+     "experience": null,
+     "designation": "Teacher",
+     "department": "Academics",
+     "join_date": "2024-04-01",
+     "employment_type": "Permanent",
+     "probation_end": null,
+     "contract_end": null,
+     "basic_salary": "54000.00",
+     "allowances": "0.00",
+     "status": "active",
+     "photo_url": null,
+     "deleted_at": null,
+     "created_at": "2026-11-02T20:14:45.000Z",
+     "updated_at": "2026-11-02T20:14:45.000Z"
+    },
+    "Class": {
+     "id": 17,
+     "uuid": "2ac2efbf-41dc-470f-9eee-42328a06c067",
+     "school_id": 3,
+     "campus_id": 4,
+     "session_id": 3,
+     "name": "Class 5",
+     "sort_order": 7,
+     "is_active": true,
+     "deleted_at": null,
+     "created_at": "2026-10-29T12:30:24.000Z",
+     "updated_at": "2026-10-29T12:30:24.000Z"
+    },
+    "Subject": {
+     "id": 8,
+     "uuid": "6f6399a2-dfeb-4a2f-a0d0-0e478fa24ffd",
+     "school_id": 3,
+     "code": "MTH",
+     "name": "Mathematics",
+     "type": "Core",
+     "theory_prac": "Theory",
+     "is_active": true,
+     "created_at": "2026-11-02T20:14:44.000Z",
+     "updated_at": "2026-11-02T20:14:44.000Z"
+    }
+   },
+   {
+    "id": 3,
+    "staff_id": 9,
+    "class_id": 17,
+    "section": "A",
+    "subject_id": 9,
+    "Staff": {
+     "id": 9,
+     "uuid": "f0b51517-2d04-47da-828e-a5a8bdc67ba0",
+     "school_id": 3,
+     "campus_id": 4,
+     "emp_id": "EMP-0001",
+     "name": "Sadia Anwar (Test)",
+     "cnic": "35202-5551212-4",
+     "mobile": "0300-5551212",
+     "email": "sadia.test@sbs.local",
+     "dob": null,
+     "emergency_phone": null,
+     "address": null,
+     "qualification": null,
+     "experience": null,
+     "designation": "Teacher",
+     "department": "Academics",
+     "join_date": "2024-04-01",
+     "employment_type": "Permanent",
+     "probation_end": null,
+     "contract_end": null,
+     "basic_salary": "54000.00",
+     "allowances": "0.00",
+     "status": "active",
+     "photo_url": null,
+     "deleted_at": null,
+     "created_at": "2026-11-02T20:14:45.000Z",
+     "updated_at": "2026-11-02T20:14:45.000Z"
+    },
+    "Class": {
+     "id": 17,
+     "uuid": "2ac2efbf-41dc-470f-9eee-42328a06c067",
+     "school_id": 3,
+     "campus_id": 4,
+     "session_id": 3,
+     "name": "Class 5",
+     "sort_order": 7,
+     "is_active": true,
+     "deleted_at": null,
+     "created_at": "2026-10-29T12:30:24.000Z",
+     "updated_at": "2026-10-29T12:30:24.000Z"
+    },
+    "Subject": {
+     "id": 9,
+     "uuid": "63006621-eb66-4210-a857-949dc3cb00c6",
+     "school_id": 3,
+     "code": "URD",
+     "name": "Urdu",
+     "type": "Core",
+     "theory_prac": "Theory",
+     "is_active": true,
+     "created_at": "2026-11-02T20:14:45.000Z",
+     "updated_at": "2026-11-02T20:14:45.000Z"
+    }
+   }
+  ]
+ },
+ "/api/web/approvals": {
+  "status": 200,
+  "message": "Success",
+  "data": []
+ },
+ "/api/web/attendance/classes": {
+  "status": 200,
+  "message": "Success",
+  "data": [
+   {
+    "id": "10",
+    "name": "Playgroup",
+    "sections": [
+     {
+      "name": "A",
+      "capacity": 40,
+      "teacherId": null,
+      "room": null
+     }
+    ]
+   },
+   {
+    "id": "11",
+    "name": "Nursery",
+    "sections": [
+     {
+      "name": "A",
+      "capacity": 40,
+      "teacherId": null,
+      "room": null
+     }
+    ]
+   },
+   {
+    "id": "12",
+    "name": "Prep",
+    "sections": [
+     {
+      "name": "A",
+      "capacity": 40,
+      "teacherId": null,
+      "room": null
+     }
+    ]
+   },
+   {
+    "id": "13",
+    "name": "Class 1",
+    "sections": [
+     {
+      "name": "A",
+      "capacity": 40,
+      "teacherId": null,
+      "room": null
+     }
+    ]
+   },
+   {
+    "id": "14",
+    "name": "Class 2",
+    "sections": [
+     {
+      "name": "A",
+      "capacity": 40,
+      "teacherId": null,
+      "room": null
+     }
+    ]
+   },
+   {
+    "id": "15",
+    "name": "Class 3",
+    "sections": [
+     {
+      "name": "A",
+      "capacity": 40,
+      "teacherId": null,
+      "room": null
+     }
+    ]
+   },
+   {
+    "id": "16",
+    "name": "Class 4",
+    "sections": [
+     {
+      "name": "A",
+      "capacity": 40,
+      "teacherId": null,
+      "room": null
+     }
+    ]
+   },
+   {
+    "id": "17",
+    "name": "Class 5",
+    "sections": [
+     {
+      "name": "A",
+      "capacity": 40,
+      "teacherId": null,
+      "room": null
+     }
+    ]
+   },
+   {
+    "id": "18",
+    "name": "Class 6",
+    "sections": [
+     {
+      "name": "A",
+      "capacity": 40,
+      "teacherId": null,
+      "room": null
+     }
+    ]
+   },
+   {
+    "id": "19",
+    "name": "Class 7",
+    "sections": [
+     {
+      "name": "A",
+      "capacity": 40,
+      "teacherId": null,
+      "room": null
+     }
+    ]
+   },
+   {
+    "id": "20",
+    "name": "Class 8",
+    "sections": [
+     {
+      "name": "A",
+      "capacity": 40,
+      "teacherId": null,
+      "room": null
+     }
+    ]
+   },
+   {
+    "id": "21",
+    "name": "Class 9",
+    "sections": [
+     {
+      "name": "A",
+      "capacity": 40,
+      "teacherId": null,
+      "room": null
+     }
+    ]
+   },
+   {
+    "id": "22",
+    "name": "Class 10",
+    "sections": [
+     {
+      "name": "A",
+      "capacity": 40,
+      "teacherId": null,
+      "room": null
+     }
+    ]
+   }
+  ]
+ },
+ "/api/web/attendance/shortage": {
+  "status": 500,
+  "message": "Something went wrong. Please try again.",
+  "data": null
+ },
+ "/api/web/attendance/staff": {
+  "status": 200,
+  "message": "Success",
+  "data": [
+   {
+    "id": "9",
+    "name": "Sadia Anwar (Test)",
+    "empId": "EMP-0001",
+    "designation": "Teacher",
+    "status": null
+   }
+  ]
+ },
+ "/api/web/attendance/students": {
+  "status": 200,
+  "message": "Success",
+  "data": {
+   "marked": true,
+   "students": [
+    {
+     "id": "43",
+     "name": "Ahmed Test",
+     "grNo": "GR-MC-0003",
+     "mark": "L"
+    },
+    {
+     "id": "42",
+     "name": "Ayesha Test",
+     "grNo": "GR-MC-0002",
+     "mark": "P"
+    }
+   ]
+  }
+ },
+ "/api/web/audit": {
+  "status": 200,
+  "message": "Success",
+  "data": [
+   {
+    "id": 77,
+    "school_id": 3,
+    "user_id": 9,
+    "action": "login",
+    "entity": "users",
+    "entity_id": 9,
+    "meta": null,
+    "created_at": "2026-11-02T20:28:32.000Z"
+   },
+   {
+    "id": 76,
+    "school_id": 3,
+    "user_id": 11,
+    "action": "login",
+    "entity": "users",
+    "entity_id": 11,
+    "meta": null,
+    "created_at": "2026-11-02T20:16:37.000Z"
+   },
+   {
+    "id": 75,
+    "school_id": 3,
+    "user_id": 12,
+    "action": "login",
+    "entity": "users",
+    "entity_id": 12,
+    "meta": null,
+    "created_at": "2026-11-02T20:15:45.000Z"
+   },
+   {
+    "id": 74,
+    "school_id": 3,
+    "user_id": 11,
+    "action": "login",
+    "entity": "users",
+    "entity_id": 11,
+    "meta": null,
+    "created_at": "2026-11-02T20:15:34.000Z"
+   },
+   {
+    "id": 73,
+    "school_id": 3,
+    "user_id": 9,
+    "action": "generate_vouchers",
+    "entity": "fee_vouchers",
+    "entity_id": null,
+    "meta": {
+     "count": 3,
+     "month": "2026-11"
+    },
+    "created_at": "2026-11-02T20:15:02.000Z"
+   },
+   {
+    "id": 72,
+    "school_id": 3,
+    "user_id": 9,
+    "action": "admit",
+    "entity": "students",
+    "entity_id": 43,
+    "meta": null,
+    "created_at": "2026-11-02T20:14:49.000Z"
+   },
+   {
+    "id": 71,
+    "school_id": 3,
+    "user_id": 9,
+    "action": "register",
+    "entity": "registrations",
+    "entity_id": 3,
+    "meta": null,
+    "created_at": "2026-11-02T20:14:48.000Z"
+   },
+   {
+    "id": 70,
+    "school_id": 3,
+    "user_id": 9,
+    "action": "admit",
+    "entity": "students",
+    "entity_id": 42,
+    "meta": null,
+    "created_at": "2026-11-02T20:14:48.000Z"
+   },
+   {
+    "id": 69,
+    "school_id": 3,
+    "user_id": 9,
+    "action": "register",
+    "entity": "registrations",
+    "entity_id": 2,
+    "meta": null,
+    "created_at": "2026-11-02T20:14:47.000Z"
+   },
+   {
+    "id": 68,
+    "school_id": 3,
+    "user_id": 9,
+    "action": "login",
+    "entity": "users",
+    "entity_id": 9,
+    "meta": null,
+    "created_at": "2026-11-02T20:14:43.000Z"
+   },
+   {
+    "id": 67,
+    "school_id": 3,
+    "user_id": 9,
+    "action": "login",
+    "entity": "users",
+    "entity_id": 9,
+    "meta": null,
+    "created_at": "2026-11-02T20:09:00.000Z"
+   },
+   {
+    "id": 62,
+    "school_id": 3,
+    "user_id": 9,
+    "action": "login",
+    "entity": "users",
+    "entity_id": 9,
+    "meta": null,
+    "created_at": "2026-11-02T19:54:52.000Z"
+   },
+   {
+    "id": 61,
+    "school_id": 3,
+    "user_id": 9,
+    "action": "login",
+    "entity": "users",
+    "entity_id": 9,
+    "meta": null,
+    "created_at": "2026-11-02T16:45:10.000Z"
+   },
+   {
+    "id": 24,
+    "school_id": 3,
+    "user_id": 9,
+    "action": "create",
+    "entity": "students",
+    "entity_id": 41,
+    "meta": null,
+    "created_at": "2026-10-29T12:45:43.000Z"
+   },
+   {
+    "id": 23,
+    "school_id": 3,
+    "user_id": 9,
+    "action": "login",
+    "entity": "users",
+    "entity_id": 9,
+    "meta": null,
+    "created_at": "2026-10-29T12:43:39.000Z"
+   }
+  ]
+ },
+ "/api/web/calendar": {
+  "status": 200,
+  "message": "Success",
+  "data": [
+   {
+    "id": 1,
+    "school_id": 3,
+    "campus_id": 4,
+    "title": "Parent-teacher meeting",
+    "event_date": "2026-11-14",
+    "kind": "event"
+   },
+   {
+    "id": 2,
+    "school_id": 3,
+    "campus_id": 4,
+    "title": "Final term exams begin",
+    "event_date": "2026-12-01",
+    "kind": "exam"
+   },
+   {
+    "id": 3,
+    "school_id": 3,
+    "campus_id": 4,
+    "title": "Winter vacation",
+    "event_date": "2026-12-21",
+    "kind": "vacation"
+   },
+   {
+    "id": 4,
+    "school_id": 3,
+    "campus_id": 4,
+    "title": "Quaid Day",
+    "event_date": "2026-12-25",
+    "kind": "holiday"
+   },
+   {
+    "id": 5,
+    "school_id": 3,
+    "campus_id": 4,
+    "title": "Annual sports day",
+    "event_date": "2027-01-14",
+    "kind": "event"
+   }
+  ]
+ },
+ "/api/web/class-subjects": {
+  "status": 500,
+  "message": "Something went wrong. Please try again.",
+  "data": null
+ },
+ "/api/web/context": {
+  "status": 200,
+  "message": "Success",
+  "data": {
+   "school": {
+    "id": "3",
+    "name": "Science Base School",
+    "brandColor": "#e67120",
+    "settings": {
+     "city": "",
+     "dueDay": 10,
+     "address": "73 Hague Freeway",
+     "contact": "3071755356",
+     "schoolName": "Science Base School",
+     "attendanceCutoff": "10:00"
+    }
+   },
+   "campuses": [
+    {
+     "id": "4",
+     "name": "Main Campus",
+     "code": "MC",
+     "address": "73 Hague Freeway",
+     "phone": "3071755356",
+     "timings": null,
+     "bankName": null,
+     "bankAccount": null,
+     "activeSessionId": "3"
+    }
+   ],
+   "sessions": [
+    {
+     "id": "3",
+     "name": "2026-27",
+     "isCurrent": true,
+     "isClosed": false
+    }
+   ],
+   "classes": [
+    {
+     "id": "10",
+     "name": "Playgroup",
+     "sections": [
+      "A"
+     ]
+    },
+    {
+     "id": "11",
+     "name": "Nursery",
+     "sections": [
+      "A"
+     ]
+    },
+    {
+     "id": "12",
+     "name": "Prep",
+     "sections": [
+      "A"
+     ]
+    },
+    {
+     "id": "13",
+     "name": "Class 1",
+     "sections": [
+      "A"
+     ]
+    },
+    {
+     "id": "14",
+     "name": "Class 2",
+     "sections": [
+      "A"
+     ]
+    },
+    {
+     "id": "15",
+     "name": "Class 3",
+     "sections": [
+      "A"
+     ]
+    },
+    {
+     "id": "16",
+     "name": "Class 4",
+     "sections": [
+      "A"
+     ]
+    },
+    {
+     "id": "17",
+     "name": "Class 5",
+     "sections": [
+      "A"
+     ]
+    },
+    {
+     "id": "18",
+     "name": "Class 6",
+     "sections": [
+      "A"
+     ]
+    },
+    {
+     "id": "19",
+     "name": "Class 7",
+     "sections": [
+      "A"
+     ]
+    },
+    {
+     "id": "20",
+     "name": "Class 8",
+     "sections": [
+      "A"
+     ]
+    },
+    {
+     "id": "21",
+     "name": "Class 9",
+     "sections": [
+      "A"
+     ]
+    },
+    {
+     "id": "22",
+     "name": "Class 10",
+     "sections": [
+      "A"
+     ]
+    }
+   ]
+  }
+ },
+ "/api/web/dashboard": {
+  "status": 200,
+  "message": "Success",
+  "data": {
+   "greeting": "Welcome. 2 Nov 2026",
+   "stats": [
+    {
+     "key": "students",
+     "label": "Students",
+     "value": "3",
+     "route": "/students"
+    },
+    {
+     "key": "att",
+     "label": "Today's attendance",
+     "value": "100%",
+     "sub": "0 absent of 2 marked",
+     "route": "/attendance"
+    },
+    {
+     "key": "col",
+     "label": "Collected today",
+     "value": "Rs. 0",
+     "sub": "This month Rs. 0",
+     "route": "/counter"
+    },
+    {
+     "key": "exp",
+     "label": "Expected this month",
+     "value": "Rs. 14,450",
+     "sub": "0% collected",
+     "route": "/vouchers"
+    },
+    {
+     "key": "dues",
+     "label": "Outstanding dues",
+     "value": "Rs. 14,450",
+     "sub": "3 open vouchers",
+     "route": "/defaulters"
+    },
+    {
+     "key": "staff",
+     "label": "Staff present",
+     "value": "0 / 1",
+     "sub": "Today",
+     "route": "/staff-attendance"
+    },
+    {
+     "key": "pend",
+     "label": "Pending approvals",
+     "value": "0",
+     "sub": "Admissions, discounts, leaves and more",
+     "route": "/approvals"
+    }
+   ],
+   "feeTrend": [
+    {
+     "label": "Jun",
+     "amount": 0
+    },
+    {
+     "label": "Jul",
+     "amount": 0
+    },
+    {
+     "label": "Aug",
+     "amount": 0
+    },
+    {
+     "label": "Sep",
+     "amount": 0
+    },
+    {
+     "label": "Oct",
+     "amount": 0
+    },
+    {
+     "label": "Nov",
+     "amount": 0
+    }
+   ],
+   "alerts": [
+    {
+     "text": "Attendance not marked yet: Class 1-A",
+     "route": "/attendance"
+    }
+   ],
+   "pendingApprovals": 0,
+   "notices": [
+    {
+     "id": "3",
+     "title": "November fee vouchers issued",
+     "text": "Please pay before the 10th to avoid the late fine.",
+     "at": "2026-11-02T20:14:59.000Z"
+    },
+    {
+     "id": "2",
+     "title": "PTM this month",
+     "text": "Meet the class teacher between 9 and 12 in the main hall.",
+     "at": "2026-11-02T20:14:58.000Z"
+    }
+   ]
+  }
+ },
+ "/api/web/entry-tests": {
+  "status": 200,
+  "message": "Success",
+  "data": []
+ },
+ "/api/web/fees/cash-closing": {
+  "status": 200,
+  "message": "Success",
+  "data": []
+ },
+ "/api/web/fees/counter": {
+  "status": 200,
+  "message": "Success",
+  "data": {
+   "collectedToday": 0,
+   "cashToday": 0,
+   "bankToday": 0,
+   "onlineToday": 0
+  }
+ },
+ "/api/web/fees/defaulters": {
+  "status": 200,
+  "message": "Success",
+  "data": [
+   {
+    "id": "41",
+    "name": "qwertyuiop",
+    "grNo": "GR-MC-0001",
+    "section": "A",
+    "mobile": "wertyuioiuy",
+    "amount": 0,
+    "vouchers": 1
+   },
+   {
+    "id": "42",
+    "name": "Ayesha Test",
+    "grNo": "GR-MC-0002",
+    "section": "A",
+    "mobile": "0300-7654321",
+    "amount": 7225,
+    "vouchers": 1
+   },
+   {
+    "id": "43",
+    "name": "Ahmed Test",
+    "grNo": "GR-MC-0003",
+    "section": "A",
+    "mobile": "0300-7654321",
+    "amount": 7225,
+    "vouchers": 1
+   }
+  ]
+ },
+ "/api/web/fees/discounts": {
+  "status": 200,
+  "message": "Success",
+  "data": []
+ },
+ "/api/web/fees/heads": {
+  "status": 200,
+  "message": "Success",
+  "data": [
+   {
+    "id": 8,
+    "uuid": "38588737-c721-49b6-9718-ffb89d23c68f",
+    "school_id": 3,
+    "name": "Tuition",
+    "type": "monthly",
+    "is_discountable": true,
+    "is_active": true,
+    "created_at": "2026-10-29T12:30:24.000Z",
+    "updated_at": "2026-10-29T12:30:24.000Z"
+   },
+   {
+    "id": 9,
+    "uuid": "d595732d-cba1-40f1-a621-0f499e99857a",
+    "school_id": 3,
+    "name": "Computer",
+    "type": "monthly",
+    "is_discountable": true,
+    "is_active": true,
+    "created_at": "2026-10-29T12:30:24.000Z",
+    "updated_at": "2026-10-29T12:30:24.000Z"
+   },
+   {
+    "id": 10,
+    "uuid": "1e8076a7-3b31-48ee-9da0-dd5183a08879",
+    "school_id": 3,
+    "name": "Transport",
+    "type": "monthly",
+    "is_discountable": true,
+    "is_active": true,
+    "created_at": "2026-10-29T12:30:24.000Z",
+    "updated_at": "2026-10-29T12:30:24.000Z"
+   }
+  ]
+ },
+ "/api/web/fees/structure": {
+  "status": 200,
+  "message": "Success",
+  "data": [
+   {
+    "id": 11,
+    "school_id": 3,
+    "campus_id": 4,
+    "session_id": 3,
+    "class_id": 17,
+    "fee_head_id": 8,
+    "amount": "7500.00",
+    "FeeHead": {
+     "id": 8,
+     "uuid": "38588737-c721-49b6-9718-ffb89d23c68f",
+     "school_id": 3,
+     "name": "Tuition",
+     "type": "monthly",
+     "is_discountable": true,
+     "is_active": true,
+     "created_at": "2026-10-29T12:30:24.000Z",
+     "updated_at": "2026-10-29T12:30:24.000Z"
+    },
+    "Class": {
+     "id": 17,
+     "uuid": "2ac2efbf-41dc-470f-9eee-42328a06c067",
+     "school_id": 3,
+     "campus_id": 4,
+     "session_id": 3,
+     "name": "Class 5",
+     "sort_order": 7,
+     "is_active": true,
+     "deleted_at": null,
+     "created_at": "2026-10-29T12:30:24.000Z",
+     "updated_at": "2026-10-29T12:30:24.000Z"
+    }
+   },
+   {
+    "id": 12,
+    "school_id": 3,
+    "campus_id": 4,
+    "session_id": 3,
+    "class_id": 17,
+    "fee_head_id": 9,
+    "amount": "1000.00",
+    "FeeHead": {
+     "id": 9,
+     "uuid": "d595732d-cba1-40f1-a621-0f499e99857a",
+     "school_id": 3,
+     "name": "Computer",
+     "type": "monthly",
+     "is_discountable": true,
+     "is_active": true,
+     "created_at": "2026-10-29T12:30:24.000Z",
+     "updated_at": "2026-10-29T12:30:24.000Z"
+    },
+    "Class": {
+     "id": 17,
+     "uuid": "2ac2efbf-41dc-470f-9eee-42328a06c067",
+     "school_id": 3,
+     "campus_id": 4,
+     "session_id": 3,
+     "name": "Class 5",
+     "sort_order": 7,
+     "is_active": true,
+     "deleted_at": null,
+     "created_at": "2026-10-29T12:30:24.000Z",
+     "updated_at": "2026-10-29T12:30:24.000Z"
+    }
+   }
+  ]
+ },
+ "/api/web/fees/vouchers": {
+  "status": 200,
+  "message": "Success",
+  "data": [
+   {
+    "id": "61",
+    "voucherNo": "V-26-000003",
+    "studentName": "Ahmed Test",
+    "grNo": "GR-MC-0003",
+    "studentId": "43",
+    "month": "2026-11",
+    "title": "Fee 2026-11",
+    "issueDate": "2026-11-01",
+    "dueDate": "2026-11-10",
+    "amount": 7225,
+    "paid": 0,
+    "balance": 7225,
+    "status": "unpaid",
+    "lines": [
+     {
+      "label": "Tuition",
+      "amount": 7500,
+      "discount": 1125
+     },
+     {
+      "label": "Computer",
+      "amount": 1000,
+      "discount": 150
+     }
+    ]
+   },
+   {
+    "id": "60",
+    "voucherNo": "V-26-000002",
+    "studentName": "Ayesha Test",
+    "grNo": "GR-MC-0002",
+    "studentId": "42",
+    "month": "2026-11",
+    "title": "Fee 2026-11",
+    "issueDate": "2026-11-01",
+    "dueDate": "2026-11-10",
+    "amount": 7225,
+    "paid": 0,
+    "balance": 7225,
+    "status": "unpaid",
+    "lines": [
+     {
+      "label": "Tuition",
+      "amount": 7500,
+      "discount": 1125
+     },
+     {
+      "label": "Computer",
+      "amount": 1000,
+      "discount": 150
+     }
+    ]
+   },
+   {
+    "id": "59",
+    "voucherNo": "V-26-000001",
+    "studentName": "qwertyuiop",
+    "grNo": "GR-MC-0001",
+    "studentId": "41",
+    "month": "2026-11",
+    "title": "Fee 2026-11",
+    "issueDate": "2026-11-01",
+    "dueDate": "2026-11-10",
+    "amount": 0,
+    "paid": 0,
+    "balance": 0,
+    "status": "unpaid",
+    "lines": []
+   }
+  ]
+ },
+ "/api/web/fees/waivers": {
+  "status": 200,
+  "message": "Success",
+  "data": []
+ },
+ "/api/web/inquiries": {
+  "status": 200,
+  "message": "Success",
+  "data": []
+ },
+ "/api/web/leave-calendar": {
+  "status": 200,
+  "message": "Success",
+  "data": []
+ },
+ "/api/web/leave": {
+  "status": 200,
+  "message": "Success",
+  "data": {
+   "policies": [],
+   "items": []
+  }
+ },
+ "/api/web/library/issues": {
+  "status": 200,
+  "message": "Success",
+  "data": []
+ },
+ "/api/web/marks": {
+  "status": 200,
+  "message": "Success",
+  "data": {
+   "exam": {
+    "id": 1,
+    "name": "Mid-term 2026",
+    "marksOpen": true,
+    "locked": false,
+    "status": "draft"
+   },
+   "students": [
+    {
+     "id": 43,
+     "name": "Ahmed Test",
+     "grNo": "GR-MC-0003",
+     "marks": 78,
+     "max": 100
+    },
+    {
+     "id": 42,
+     "name": "Ayesha Test",
+     "grNo": "GR-MC-0002",
+     "marks": 92,
+     "max": 100
+    }
+   ]
+  }
+ },
+ "/api/web/modules/complaints": {
+  "status": 200,
+  "message": "Success",
+  "data": []
+ },
+ "/api/web/modules/diary": {
+  "status": 200,
+  "message": "Success",
+  "data": [
+   {
+    "id": 2,
+    "school_id": 3,
+    "campus_id": 4,
+    "class_id": 17,
+    "section": "A",
+    "subject_id": 8,
+    "staff_id": 9,
+    "entry_date": "2026-11-03",
+    "topic": "Fractions — Exercise 4.2",
+    "homework": "Q1–6 in notebook. Test on Monday.",
+    "created_at": "2026-11-02T20:15:00.000Z"
+   },
+   {
+    "id": 1,
+    "school_id": 3,
+    "campus_id": 4,
+    "class_id": 17,
+    "section": "A",
+    "subject_id": 7,
+    "staff_id": 9,
+    "entry_date": "2026-11-03",
+    "topic": "Lesson 7 \"The Honest Woodcutter\"",
+    "homework": "Learn and write 10 new words in the copy.",
+    "created_at": "2026-11-02T20:14:59.000Z"
+   }
+  ]
+ },
+ "/api/web/modules/exams": {
+  "status": 200,
+  "message": "Success",
+  "data": [
+   {
+    "id": 1,
+    "uuid": "bff84c5e-5612-4e2a-975a-75bf60878657",
+    "school_id": 3,
+    "campus_id": 4,
+    "session_id": 3,
+    "name": "Mid-term 2026",
+    "start_date": "2026-10-12",
+    "end_date": "2026-10-20",
+    "marks_open": true,
+    "is_locked": false,
+    "result_status": "draft",
+    "created_at": "2026-11-02T20:15:04.000Z",
+    "updated_at": "2026-11-02T20:15:04.000Z"
+   }
+  ]
+ },
+ "/api/web/modules/expenses": {
+  "status": 200,
+  "message": "Success",
+  "data": []
+ },
+ "/api/web/modules/homework": {
+  "status": 200,
+  "message": "Success",
+  "data": [
+   {
+    "id": 2,
+    "uuid": "965da064-0d99-459a-9789-59cdb6aaeb92",
+    "school_id": 3,
+    "campus_id": 4,
+    "class_id": 17,
+    "section": "A",
+    "subject_id": 7,
+    "teacher_id": 9,
+    "title": "My hero essay",
+    "body": "Write 150 words about your hero.",
+    "due_date": "2026-11-09",
+    "created_at": "2026-11-02T20:15:00.000Z"
+   },
+   {
+    "id": 1,
+    "uuid": "fd58f12b-1a61-4453-9a51-b4c4bd2c219b",
+    "school_id": 3,
+    "campus_id": 4,
+    "class_id": 17,
+    "section": "A",
+    "subject_id": 8,
+    "teacher_id": 9,
+    "title": "Fractions worksheet",
+    "body": "Solve Q1–10. Show working. Upload a clear photo of each page.",
+    "due_date": "2026-11-04",
+    "created_at": "2026-11-02T20:15:00.000Z"
+   }
+  ]
+ },
+ "/api/web/modules/items": {
+  "status": 200,
+  "message": "Success",
+  "data": []
+ },
+ "/api/web/modules/library": {
+  "status": 200,
+  "message": "Success",
+  "data": []
+ },
+ "/api/web/modules/messages": {
+  "status": 200,
+  "message": "Success",
+  "data": []
+ },
+ "/api/web/modules/routes": {
+  "status": 200,
+  "message": "Success",
+  "data": []
+ },
+ "/api/web/modules/substitutions": {
+  "status": 200,
+  "message": "Success",
+  "data": []
+ },
+ "/api/web/modules/vehicles": {
+  "status": 200,
+  "message": "Success",
+  "data": []
+ },
+ "/api/web/modules/visitors": {
+  "status": 200,
+  "message": "Success",
+  "data": []
+ },
+ "/api/web/notices": {
+  "status": 200,
+  "message": "Success",
+  "data": [
+   {
+    "id": "3",
+    "title": "November fee vouchers issued",
+    "text": "Please pay before the 10th to avoid the late fine.",
+    "bodyUrdu": null,
+    "audience": "parent",
+    "at": "2026-11-02T20:14:59.000Z"
+   },
+   {
+    "id": "2",
+    "title": "PTM this month",
+    "text": "Meet the class teacher between 9 and 12 in the main hall.",
+    "bodyUrdu": "کلاس ٹیچر سے صبح ۹ سے ۱۲ بجے کے درمیان ملیں۔",
+    "audience": "all",
+    "at": "2026-11-02T20:14:58.000Z"
+   }
+  ]
+ },
+ "/api/web/outbox": {
+  "status": 200,
+  "message": "Success",
+  "data": [
+   {
+    "id": 7,
+    "school_id": 3,
+    "channel": "whatsapp",
+    "event_key": "attendance.absent",
+    "target": "0300-7654321",
+    "body": "Ayesha Test was marked absent on 2026-10-31.",
+    "status": "skipped",
+    "created_at": "2026-11-02T20:15:03.000Z",
+    "updated_at": "2026-11-02T20:15:03.000Z"
+   },
+   {
+    "id": 6,
+    "school_id": 3,
+    "channel": "whatsapp",
+    "event_key": "fee.voucher",
+    "target": "0300-7654321",
+    "body": "Fee voucher for 2026-11 is ready for Ahmed Test.",
+    "status": "skipped",
+    "created_at": "2026-11-02T20:15:02.000Z",
+    "updated_at": "2026-11-02T20:15:02.000Z"
+   },
+   {
+    "id": 5,
+    "school_id": 3,
+    "channel": "whatsapp",
+    "event_key": "fee.voucher",
+    "target": "0300-7654321",
+    "body": "Fee voucher for 2026-11 is ready for Ayesha Test.",
+    "status": "skipped",
+    "created_at": "2026-11-02T20:15:02.000Z",
+    "updated_at": "2026-11-02T20:15:02.000Z"
+   },
+   {
+    "id": 4,
+    "school_id": 3,
+    "channel": "whatsapp",
+    "event_key": "fee.voucher",
+    "target": "wertyuioiuy",
+    "body": "Fee voucher for 2026-11 is ready for qwertyuiop.",
+    "status": "skipped",
+    "created_at": "2026-11-02T20:15:02.000Z",
+    "updated_at": "2026-11-02T20:15:02.000Z"
+   },
+   {
+    "id": 3,
+    "school_id": 3,
+    "channel": "whatsapp",
+    "event_key": "admission.admitted",
+    "target": "0300-7654321",
+    "body": "Ahmed Test admitted. GR GR-MC-0003. Sign in with OTP on the parent portal.",
+    "status": "skipped",
+    "created_at": "2026-11-02T20:14:49.000Z",
+    "updated_at": "2026-11-02T20:14:49.000Z"
+   },
+   {
+    "id": 2,
+    "school_id": 3,
+    "channel": "whatsapp",
+    "event_key": "admission.admitted",
+    "target": "0300-7654321",
+    "body": "Ayesha Test admitted. GR GR-MC-0002. Sign in with OTP on the parent portal.",
+    "status": "skipped",
+    "created_at": "2026-11-02T20:14:48.000Z",
+    "updated_at": "2026-11-02T20:14:48.000Z"
+   }
+  ]
+ },
+ "/api/web/outbox/status": {
+  "status": 200,
+  "message": "Success",
+  "data": {
+   "sms": false,
+   "whatsapp": false,
+   "smsProvider": null,
+   "whatsappProvider": null
+  }
+ },
+ "/api/web/payroll": {
+  "status": 200,
+  "message": "Success",
+  "data": []
+ },
+ "/api/web/registrations": {
+  "status": 200,
+  "message": "Success",
+  "data": [
+   {
+    "id": "3",
+    "regNo": "REG-26-0002",
+    "name": "Ahmed Test",
+    "className": "Class 5",
+    "classId": "17",
+    "fatherName": "Imran Test",
+    "fatherCnic": "35202-7654321-1",
+    "mobile": "0300-7654321",
+    "feeAmount": "1500.00",
+    "feePaid": true,
+    "decision": "selected",
+    "principal": "approved",
+    "status": "admitted",
+    "gender": "M",
+    "dob": "2016-03-14",
+    "bform": null
+   },
+   {
+    "id": "2",
+    "regNo": "REG-26-0001",
+    "name": "Ayesha Test",
+    "className": "Class 5",
+    "classId": "17",
+    "fatherName": "Imran Test",
+    "fatherCnic": "35202-7654321-1",
+    "mobile": "0300-7654321",
+    "feeAmount": "1500.00",
+    "feePaid": true,
+    "decision": "selected",
+    "principal": "approved",
+    "status": "admitted",
+    "gender": "F",
+    "dob": "2016-03-14",
+    "bform": null
+   }
+  ]
+ },
+ "/api/web/reports/admissions": {
+  "status": 200,
+  "message": "Success",
+  "data": {
+   "title": "Admission register",
+   "rows": [
+    {
+     "regNo": "REG-26-0002",
+     "name": "Ahmed Test",
+     "classId": 17,
+     "decision": "selected",
+     "status": "admitted"
+    },
+    {
+     "regNo": "REG-26-0001",
+     "name": "Ayesha Test",
+     "classId": 17,
+     "decision": "selected",
+     "status": "admitted"
+    }
+   ],
+   "csv": "regNo,name,classId,decision,status\n\"REG-26-0002\",\"Ahmed Test\",17,\"selected\",\"admitted\"\n\"REG-26-0001\",\"Ayesha Test\",17,\"selected\",\"admitted\""
+  }
+ },
+ "/api/web/reports/attendance": {
+  "status": 200,
+  "message": "Success",
+  "data": {
+   "title": "Attendance days",
+   "rows": [
+    {
+     "date": "2026-11-02",
+     "classId": 17,
+     "section": "A"
+    },
+    {
+     "date": "2026-10-31",
+     "classId": 17,
+     "section": "A"
+    },
+    {
+     "date": "2026-10-30",
+     "classId": 17,
+     "section": "A"
+    },
+    {
+     "date": "2026-10-29",
+     "classId": 17,
+     "section": "A"
+    }
+   ],
+   "csv": "date,classId,section\n\"2026-11-02\",17,\"A\"\n\"2026-10-31\",17,\"A\"\n\"2026-10-30\",17,\"A\"\n\"2026-10-29\",17,\"A\""
+  }
+ },
+ "/api/web/reports/collection": {
+  "status": 200,
+  "message": "Success",
+  "data": {
+   "title": "Fee collection",
+   "rows": [],
+   "csv": ""
+  }
+ },
+ "/api/web/reports/defaulters": {
+  "status": 200,
+  "message": "Success",
+  "data": {
+   "title": "Defaulters",
+   "rows": [
+    {
+     "voucher": "V-26-000001",
+     "studentId": 41,
+     "amount": 0,
+     "status": "unpaid"
+    },
+    {
+     "voucher": "V-26-000002",
+     "studentId": 42,
+     "amount": 7225,
+     "status": "unpaid"
+    },
+    {
+     "voucher": "V-26-000003",
+     "studentId": 43,
+     "amount": 7225,
+     "status": "unpaid"
+    }
+   ],
+   "csv": "voucher,studentId,amount,status\n\"V-26-000001\",41,0,\"unpaid\"\n\"V-26-000002\",42,7225,\"unpaid\"\n\"V-26-000003\",43,7225,\"unpaid\""
+  }
+ },
+ "/api/web/reports/discounts": {
+  "status": 200,
+  "message": "Success",
+  "data": {
+   "title": "Discounts given",
+   "rows": [],
+   "csv": ""
+  }
+ },
+ "/api/web/reports/leave": {
+  "status": 200,
+  "message": "Success",
+  "data": {
+   "title": "Leave taken",
+   "rows": [],
+   "csv": ""
+  }
+ },
+ "/api/web/reports/staff": {
+  "status": 200,
+  "message": "Success",
+  "data": {
+   "title": "Staff list",
+   "rows": [
+    {
+     "empId": "EMP-0001",
+     "name": "Sadia Anwar (Test)",
+     "designation": "Teacher",
+     "type": "Permanent",
+     "contractEnd": null,
+     "status": "active"
+    }
+   ],
+   "csv": "empId,name,designation,type,contractEnd,status\n\"EMP-0001\",\"Sadia Anwar (Test)\",\"Teacher\",\"Permanent\",\"\",\"active\""
+  }
+ },
+ "/api/web/reports/strength": {
+  "status": 200,
+  "message": "Success",
+  "data": {
+   "title": "Student strength",
+   "rows": [
+    {
+     "grNo": "GR-MC-0001",
+     "name": "qwertyuiop",
+     "classId": 13,
+     "section": "A",
+     "gender": "M",
+     "status": "active"
+    },
+    {
+     "grNo": "GR-MC-0002",
+     "name": "Ayesha Test",
+     "classId": 17,
+     "section": "A",
+     "gender": "F",
+     "status": "active"
+    },
+    {
+     "grNo": "GR-MC-0003",
+     "name": "Ahmed Test",
+     "classId": 17,
+     "section": "A",
+     "gender": "M",
+     "status": "active"
+    }
+   ],
+   "csv": "grNo,name,classId,section,gender,status\n\"GR-MC-0001\",\"qwertyuiop\",13,\"A\",\"M\",\"active\"\n\"GR-MC-0002\",\"Ayesha Test\",17,\"A\",\"F\",\"active\"\n\"GR-MC-0003\",\"Ahmed Test\",17,\"A\",\"M\",\"active\""
+  }
+ },
+ "/api/web/results": {
+  "status": 200,
+  "message": "Success",
+  "data": {
+   "exam": {
+    "id": 1,
+    "uuid": "bff84c5e-5612-4e2a-975a-75bf60878657",
+    "school_id": 3,
+    "campus_id": 4,
+    "session_id": 3,
+    "name": "Mid-term 2026",
+    "start_date": "2026-10-12",
+    "end_date": "2026-10-20",
+    "marks_open": true,
+    "is_locked": false,
+    "result_status": "draft",
+    "created_at": "2026-11-02T20:15:04.000Z",
+    "updated_at": "2026-11-02T20:15:04.000Z"
+   },
+   "cards": [
+    {
+     "studentId": 42,
+     "name": "Ayesha Test",
+     "grNo": "GR-MC-0002",
+     "section": "A",
+     "subjects": [
+      {
+       "name": "English",
+       "marks": 92,
+       "max": 100
+      },
+      {
+       "name": "Mathematics",
+       "marks": 88,
+       "max": 100
+      },
+      {
+       "name": "Urdu",
+       "marks": 81,
+       "max": 100
+      },
+      {
+       "name": "Science",
+       "marks": 84,
+       "max": 100
+      }
+     ],
+     "obtained": 345,
+     "max": 400,
+     "pct": 86.3,
+     "grade": "A"
+    },
+    {
+     "studentId": 43,
+     "name": "Ahmed Test",
+     "grNo": "GR-MC-0003",
+     "section": "A",
+     "subjects": [
+      {
+       "name": "English",
+       "marks": 78,
+       "max": 100
+      },
+      {
+       "name": "Mathematics",
+       "marks": 65,
+       "max": 100
+      },
+      {
+       "name": "Urdu",
+       "marks": 70,
+       "max": 100
+      },
+      {
+       "name": "Science",
+       "marks": 59,
+       "max": 100
+      }
+     ],
+     "obtained": 272,
+     "max": 400,
+     "pct": 68,
+     "grade": "C"
+    }
+   ],
+   "analysis": {
+    "average": 77.2,
+    "pass": 2,
+    "fail": 0
+   }
+  }
+ },
+ "/api/web/search": {
+  "status": 200,
+  "message": "Success",
+  "data": {
+   "students": [
+    {
+     "id": "42",
+     "name": "Ayesha Test",
+     "sub": "GR-MC-0002, Class 5-A, father Imran Test"
+    }
+   ],
+   "staff": []
+  }
+ },
+ "/api/web/setup": {
+  "status": 200,
+  "message": "Success",
+  "data": {
+   "setupDone": true,
+   "name": "Science Base School",
+   "code": "SBS",
+   "brandColor": "#e67120",
+   "logoUrl": "/uploads/schools/logo-1793277024774-341799.jpeg",
+   "subdomain": "sbs",
+   "plan": "trial",
+   "campuses": 1,
+   "sessions": 1,
+   "classes": 13,
+   "feeHeads": 3
+  }
+ },
+ "/api/web/staff": {
+  "status": 200,
+  "message": "Success",
+  "data": [
+   {
+    "id": "9",
+    "empId": "EMP-0001",
+    "name": "Sadia Anwar (Test)",
+    "cnic": "35202-5551212-4",
+    "mobile": "0300-5551212",
+    "email": "sadia.test@sbs.local",
+    "designation": "Teacher",
+    "department": "Academics",
+    "joinDate": "2024-04-01",
+    "type": "Permanent",
+    "contractEnd": null,
+    "basic": "54000.00",
+    "status": "active",
+    "photoUrl": null
+   }
+  ]
+ },
+ "/api/web/students": {
+  "status": 200,
+  "message": "Success",
+  "data": {
+   "items": [
+    {
+     "id": "43",
+     "grNo": "GR-MC-0003",
+     "name": "Ahmed Test",
+     "className": "Class 5",
+     "classId": "17",
+     "section": "A",
+     "rollNo": null,
+     "fatherName": "Imran Test",
+     "fatherCnic": "35202-7654321-1",
+     "mobile": "0300-7654321",
+     "motherName": null,
+     "occupation": null,
+     "address": "House 12, Street 4, Model Town",
+     "bform": null,
+     "dob": "2016-03-14",
+     "gender": "Male",
+     "status": "active",
+     "staffChild": false,
+     "admissionDate": "2026-11-02",
+     "prevSchool": "Test School",
+     "prevClass": null,
+     "photoUrl": null
+    },
+    {
+     "id": "42",
+     "grNo": "GR-MC-0002",
+     "name": "Ayesha Test",
+     "className": "Class 5",
+     "classId": "17",
+     "section": "A",
+     "rollNo": null,
+     "fatherName": "Imran Test",
+     "fatherCnic": "35202-7654321-1",
+     "mobile": "0300-7654321",
+     "motherName": null,
+     "occupation": null,
+     "address": "House 12, Street 4, Model Town",
+     "bform": null,
+     "dob": "2016-03-14",
+     "gender": "Female",
+     "status": "active",
+     "staffChild": false,
+     "admissionDate": "2026-11-02",
+     "prevSchool": "Test School",
+     "prevClass": null,
+     "photoUrl": null
+    },
+    {
+     "id": "41",
+     "grNo": "GR-MC-0001",
+     "name": "qwertyuiop",
+     "className": "Class 1",
+     "classId": "13",
+     "section": "A",
+     "rollNo": null,
+     "fatherName": "qwer789",
+     "fatherCnic": "12345678987654323",
+     "mobile": "wertyuioiuy",
+     "motherName": null,
+     "occupation": null,
+     "address": "qwrtyui",
+     "bform": null,
+     "dob": "2026-01-29",
+     "gender": "Male",
+     "status": "active",
+     "staffChild": false,
+     "admissionDate": null,
+     "prevSchool": null,
+     "prevClass": null,
+     "photoUrl": null
+    }
+   ],
+   "total": 3,
+   "page": 1,
+   "pageSize": 25
+  }
+ },
+ "/api/web/timetable": {
+  "status": 200,
+  "message": "Success",
+  "data": {
+   "days": [
+    "Mon",
+    "Tue",
+    "Wed",
+    "Thu",
+    "Fri",
+    "Sat"
+   ],
+   "periods": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+   ],
+   "slots": [
+    {
+     "id": 1,
+     "day": "Mon",
+     "period": 1,
+     "subjectId": 8,
+     "staffId": 9
+    },
+    {
+     "id": 2,
+     "day": "Mon",
+     "period": 2,
+     "subjectId": 9,
+     "staffId": 9
+    },
+    {
+     "id": 3,
+     "day": "Mon",
+     "period": 3,
+     "subjectId": 7,
+     "staffId": 9
+    },
+    {
+     "id": 4,
+     "day": "Mon",
+     "period": 4,
+     "subjectId": 8,
+     "staffId": 9
+    },
+    {
+     "id": 5,
+     "day": "Tue",
+     "period": 1,
+     "subjectId": 8,
+     "staffId": 9
+    },
+    {
+     "id": 6,
+     "day": "Tue",
+     "period": 2,
+     "subjectId": 9,
+     "staffId": 9
+    },
+    {
+     "id": 7,
+     "day": "Tue",
+     "period": 3,
+     "subjectId": 7,
+     "staffId": 9
+    },
+    {
+     "id": 8,
+     "day": "Tue",
+     "period": 4,
+     "subjectId": 8,
+     "staffId": 9
+    },
+    {
+     "id": 9,
+     "day": "Wed",
+     "period": 1,
+     "subjectId": 8,
+     "staffId": 9
+    },
+    {
+     "id": 10,
+     "day": "Wed",
+     "period": 2,
+     "subjectId": 9,
+     "staffId": 9
+    },
+    {
+     "id": 11,
+     "day": "Wed",
+     "period": 3,
+     "subjectId": 7,
+     "staffId": 9
+    },
+    {
+     "id": 12,
+     "day": "Wed",
+     "period": 4,
+     "subjectId": 8,
+     "staffId": 9
+    },
+    {
+     "id": 13,
+     "day": "Thu",
+     "period": 1,
+     "subjectId": 8,
+     "staffId": 9
+    },
+    {
+     "id": 14,
+     "day": "Thu",
+     "period": 2,
+     "subjectId": 9,
+     "staffId": 9
+    },
+    {
+     "id": 15,
+     "day": "Thu",
+     "period": 3,
+     "subjectId": 7,
+     "staffId": 9
+    },
+    {
+     "id": 16,
+     "day": "Thu",
+     "period": 4,
+     "subjectId": 8,
+     "staffId": 9
+    },
+    {
+     "id": 17,
+     "day": "Fri",
+     "period": 1,
+     "subjectId": 8,
+     "staffId": 9
+    },
+    {
+     "id": 18,
+     "day": "Fri",
+     "period": 2,
+     "subjectId": 9,
+     "staffId": 9
+    },
+    {
+     "id": 19,
+     "day": "Fri",
+     "period": 3,
+     "subjectId": 7,
+     "staffId": 9
+    },
+    {
+     "id": 20,
+     "day": "Fri",
+     "period": 4,
+     "subjectId": 8,
+     "staffId": 9
+    }
+   ],
+   "subjects": [
+    {
+     "id": 7,
+     "name": "English"
+    },
+    {
+     "id": 8,
+     "name": "Mathematics"
+    },
+    {
+     "id": 9,
+     "name": "Urdu"
+    }
+   ],
+   "staff": [
+    {
+     "id": 9,
+     "name": "Sadia Anwar (Test)"
+    }
+   ]
+  }
+ },
+ "/api/web/users": {
+  "status": 200,
+  "message": "Success",
+  "data": [
+   {
+    "id": "11",
+    "name": "Imran Test",
+    "email": "03007654321@parent.local",
+    "phone": "0300-7654321",
+    "role": "parent",
+    "disabled": false,
+    "lastLogin": "2026-11-02T20:16:37.000Z",
+    "permissions": null
+   },
+   {
+    "id": "12",
+    "name": "Ayesha Test",
+    "email": "gr-mc-0002@student.local",
+    "phone": "0300-7654321",
+    "role": "student",
+    "disabled": false,
+    "lastLogin": "2026-11-02T20:15:45.000Z",
+    "permissions": null
+   },
+   {
+    "id": "13",
+    "name": "Ahmed Test",
+    "email": "gr-mc-0003@student.local",
+    "phone": "0300-7654321",
+    "role": "student",
+    "disabled": false,
+    "lastLogin": null,
+    "permissions": null
+   },
+   {
+    "id": "9",
+    "name": "Test",
+    "email": "test@gmail.com",
+    "phone": "3071755356",
+    "role": "owner",
+    "disabled": false,
+    "lastLogin": "2026-11-02T20:28:32.000Z",
+    "permissions": null
+   }
+  ]
+ },
+ "/api/web/students/:id": {
+  "status": 200,
+  "message": "Success",
+  "data": {
+   "id": "42",
+   "grNo": "GR-MC-0002",
+   "name": "Ayesha Test",
+   "className": "Class 5",
+   "classId": "17",
+   "section": "A",
+   "rollNo": null,
+   "fatherName": "Imran Test",
+   "fatherCnic": "35202-7654321-1",
+   "mobile": "0300-7654321",
+   "motherName": null,
+   "occupation": null,
+   "address": "House 12, Street 4, Model Town",
+   "bform": null,
+   "dob": "2016-03-14",
+   "gender": "Female",
+   "status": "active",
+   "staffChild": false,
+   "admissionDate": "2026-11-02",
+   "prevSchool": "Test School",
+   "prevClass": null,
+   "photoUrl": null,
+   "dues": 7225,
+   "vouchers": [
+    {
+     "id": "60",
+     "voucherNo": "V-26-000002",
+     "month": "2026-11",
+     "amount": 7225,
+     "paid": 0,
+     "status": "unpaid"
+    }
+   ],
+   "siblings": [
+    {
+     "id": "43",
+     "name": "Ahmed Test",
+     "grNo": "GR-MC-0003",
+     "section": "A"
+    }
+   ],
+   "attendance": [
+    {
+     "date": "2026-11-02",
+     "mark": "P"
+    },
+    {
+     "date": "2026-10-31",
+     "mark": "A"
+    },
+    {
+     "date": "2026-10-30",
+     "mark": "P"
+    },
+    {
+     "date": "2026-10-29",
+     "mark": "P"
+    }
+   ],
+   "results": [
+    {
+     "subject": "English",
+     "marks": 92,
+     "max": 100
+    },
+    {
+     "subject": "Mathematics",
+     "marks": 88,
+     "max": 100
+    },
+    {
+     "subject": "Urdu",
+     "marks": 81,
+     "max": 100
+    },
+    {
+     "subject": "Science",
+     "marks": 84,
+     "max": 100
+    }
+   ]
+  }
+ },
+ "/api/web/staff/:id": {
+  "status": 200,
+  "message": "Success",
+  "data": {
+   "id": "9",
+   "empId": "EMP-0001",
+   "name": "Sadia Anwar (Test)",
+   "cnic": "35202-5551212-4",
+   "mobile": "0300-5551212",
+   "email": "sadia.test@sbs.local",
+   "designation": "Teacher",
+   "department": "Academics",
+   "joinDate": "2024-04-01",
+   "type": "Permanent",
+   "contractEnd": null,
+   "basic": "54000.00",
+   "status": "active",
+   "photoUrl": null
+  }
+ },
+ "/api/web/print/vouchers/:id": {
+  "status": 200,
+  "message": "Success",
+  "data": {
+   "copies": [
+    "Office",
+    "Bank",
+    "Parent"
+   ],
+   "school": "Science Base School",
+   "logoUrl": "/uploads/schools/logo-1793277024774-341799.jpeg",
+   "voucherNo": "V-26-000003",
+   "month": "2026-11",
+   "issueDate": "2026-11-01",
+   "dueDate": "2026-11-10",
+   "amount": 7225,
+   "paid": 0,
+   "status": "unpaid",
+   "student": {
+    "name": "Ahmed Test",
+    "grNo": "GR-MC-0003",
+    "father": "Imran Test",
+    "className": "Class 5",
+    "section": "A"
+   },
+   "lines": [
+    {
+     "head": "Tuition",
+     "amount": 7500,
+     "discount": 1125
+    },
+    {
+     "head": "Computer",
+     "amount": 1000,
+     "discount": 150
+    }
+   ]
+  }
+ },
+ "/api/web/print/certificates/:id": {
+  "status": 200,
+  "message": "Success",
+  "data": {
+   "kind": "bonafide",
+   "school": "Science Base School",
+   "date": "2026-11-02",
+   "student": {
+    "name": "Ayesha Test",
+    "father": "Imran Test",
+    "grNo": "GR-MC-0002",
+    "className": "Class 5",
+    "section": "A",
+    "dob": "2016-03-14"
+   }
+  }
+ }
+}

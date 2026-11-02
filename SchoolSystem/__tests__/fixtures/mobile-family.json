@@ -1,0 +1,1830 @@
+{
+ "parent": {
+  "/api/mobile/admit-card": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": {
+    "school": "Science Base School",
+    "exam": {
+     "id": 1,
+     "name": "Mid-term 2026",
+     "startDate": "2026-10-12",
+     "endDate": "2026-10-20"
+    },
+    "student": {
+     "id": 43,
+     "name": "Ahmed Test",
+     "grNo": "GR-MC-0003",
+     "rollNo": null,
+     "classId": 17,
+     "className": "Class 5",
+     "section": "A",
+     "father": "Imran Test",
+     "mother": null,
+     "mobile": "0300-7654321",
+     "photoUrl": null,
+     "dob": "2016-03-14",
+     "gender": "M",
+     "address": "House 12, Street 4, Model Town",
+     "campusId": 4
+    },
+    "qr": "sms:admit:5e81aece-c344-4225-9760-34f987388484:1"
+   }
+  },
+  "/api/mobile/attendance": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": {
+    "month": "2026-11",
+    "percentage": 80,
+    "present": 4,
+    "total": 5,
+    "days": [
+     {
+      "date": "2026-11-02",
+      "mark": "L"
+     },
+     {
+      "date": "2026-10-31",
+      "mark": "P"
+     },
+     {
+      "date": "2026-10-30",
+      "mark": "A"
+     },
+     {
+      "date": "2026-10-29",
+      "mark": "P"
+     },
+     {
+      "date": "2026-10-28",
+      "mark": "LV"
+     }
+    ]
+   }
+  },
+  "/api/mobile/auth/me": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": {
+    "id": "11",
+    "uuid": "2d3e6426-113f-4273-a6e7-e0d287098155",
+    "name": "Imran Test",
+    "email": "03007654321@parent.local",
+    "role": "parent",
+    "schoolId": "3",
+    "schoolName": "Science Base School",
+    "campusIds": [],
+    "staffId": null,
+    "mustChangePw": true,
+    "permissions": [],
+    "setupDone": true,
+    "plan": "trial",
+    "brandColor": "#e67120",
+    "impersonated": false,
+    "campuses": [
+     {
+      "id": "4",
+      "name": "Main Campus",
+      "code": "MC",
+      "activeSessionId": "3"
+     }
+    ],
+    "sessions": [
+     {
+      "id": "3",
+      "name": "2026-27",
+      "isCurrent": true,
+      "isClosed": false
+     }
+    ]
+   }
+  },
+  "/api/mobile/calendar": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": [
+    {
+     "id": 1,
+     "title": "Parent-teacher meeting",
+     "date": "2026-11-14",
+     "kind": "event"
+    },
+    {
+     "id": 2,
+     "title": "Final term exams begin",
+     "date": "2026-12-01",
+     "kind": "exam"
+    },
+    {
+     "id": 3,
+     "title": "Winter vacation",
+     "date": "2026-12-21",
+     "kind": "vacation"
+    },
+    {
+     "id": 4,
+     "title": "Quaid Day",
+     "date": "2026-12-25",
+     "kind": "holiday"
+    },
+    {
+     "id": 5,
+     "title": "Annual sports day",
+     "date": "2027-01-14",
+     "kind": "event"
+    }
+   ]
+  },
+  "/api/mobile/certificates": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": [
+    {
+     "id": 3,
+     "uuid": "c3",
+     "title": "bonafide",
+     "status": "requested",
+     "recordDate": "2026-10-29",
+     "studentId": 43,
+     "kind": "bonafide"
+    }
+   ]
+  },
+  "/api/mobile/children": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": [
+    {
+     "id": 43,
+     "name": "Ahmed Test",
+     "grNo": "GR-MC-0003",
+     "rollNo": null,
+     "classId": 17,
+     "className": "Class 5",
+     "section": "A",
+     "father": "Imran Test",
+     "mother": null,
+     "mobile": "0300-7654321",
+     "photoUrl": null,
+     "dob": "2016-03-14",
+     "gender": "M",
+     "address": "House 12, Street 4, Model Town",
+     "campusId": 4
+    },
+    {
+     "id": 42,
+     "name": "Ayesha Test",
+     "grNo": "GR-MC-0002",
+     "rollNo": null,
+     "classId": 17,
+     "className": "Class 5",
+     "section": "A",
+     "father": "Imran Test",
+     "mother": null,
+     "mobile": "0300-7654321",
+     "photoUrl": null,
+     "dob": "2016-03-14",
+     "gender": "F",
+     "address": "House 12, Street 4, Model Town",
+     "campusId": 4
+    }
+   ]
+  },
+  "/api/mobile/complaints": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": [
+    {
+     "id": 1,
+     "category": "Transport",
+     "body": "Van late twice this week.",
+     "status": "open",
+     "raisedBy": "Parent"
+    }
+   ]
+  },
+  "/api/mobile/diary": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": [
+    {
+     "id": 2,
+     "date": "2026-11-03",
+     "subjectId": 8,
+     "subject": "Mathematics",
+     "topic": "Fractions — Exercise 4.2",
+     "homework": "Q1–6 in notebook. Test on Monday."
+    },
+    {
+     "id": 1,
+     "date": "2026-11-03",
+     "subjectId": 7,
+     "subject": "English",
+     "topic": "Lesson 7 \"The Honest Woodcutter\"",
+     "homework": "Learn and write 10 new words in the copy."
+    }
+   ]
+  },
+  "/api/mobile/exams": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": {
+    "student": {
+     "id": 43,
+     "name": "Ahmed Test",
+     "grNo": "GR-MC-0003",
+     "rollNo": null,
+     "classId": 17,
+     "className": "Class 5",
+     "section": "A",
+     "father": "Imran Test",
+     "mother": null,
+     "mobile": "0300-7654321",
+     "photoUrl": null,
+     "dob": "2016-03-14",
+     "gender": "M",
+     "address": "House 12, Street 4, Model Town",
+     "campusId": 4
+    },
+    "exams": [
+     {
+      "id": 1,
+      "name": "Mid-term 2026",
+      "startDate": "2026-10-12",
+      "endDate": "2026-10-20",
+      "resultStatus": "draft"
+     }
+    ]
+   }
+  },
+  "/api/mobile/fees": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": {
+    "student": {
+     "id": 43,
+     "name": "Ahmed Test",
+     "grNo": "GR-MC-0003",
+     "rollNo": null,
+     "classId": 17,
+     "className": "Class 5",
+     "section": "A",
+     "father": "Imran Test",
+     "mother": null,
+     "mobile": "0300-7654321",
+     "photoUrl": null,
+     "dob": "2016-03-14",
+     "gender": "M",
+     "address": "House 12, Street 4, Model Town",
+     "campusId": 4
+    },
+    "children": [
+     {
+      "id": 43,
+      "name": "Ahmed Test",
+      "grNo": "GR-MC-0003",
+      "rollNo": null,
+      "classId": 17,
+      "className": "Class 5",
+      "section": "A",
+      "father": "Imran Test",
+      "mother": null,
+      "mobile": "0300-7654321",
+      "photoUrl": null,
+      "dob": "2016-03-14",
+      "gender": "M",
+      "address": "House 12, Street 4, Model Town",
+      "campusId": 4
+     },
+     {
+      "id": 42,
+      "name": "Ayesha Test",
+      "grNo": "GR-MC-0002",
+      "rollNo": null,
+      "classId": 17,
+      "className": "Class 5",
+      "section": "A",
+      "father": "Imran Test",
+      "mother": null,
+      "mobile": "0300-7654321",
+      "photoUrl": null,
+      "dob": "2016-03-14",
+      "gender": "F",
+      "address": "House 12, Street 4, Model Town",
+      "campusId": 4
+     }
+    ],
+    "dues": 7225,
+    "canPay": true,
+    "vouchers": [
+     {
+      "id": 61,
+      "voucherNo": "V-26-000003",
+      "uuid": "feced6b1-2164-4df6-901c-6a3e2e656078",
+      "month": "2026-11",
+      "title": "Fee 2026-11",
+      "type": "monthly",
+      "issueDate": "2026-11-01",
+      "dueDate": "2026-11-10",
+      "amount": 7225,
+      "paid": 0,
+      "balance": 7225,
+      "status": "unpaid",
+      "qr": "sms:voucher:feced6b1-2164-4df6-901c-6a3e2e656078",
+      "lines": [
+       {
+        "label": "Tuition",
+        "amount": 7500,
+        "discount": 1125
+       },
+       {
+        "label": "Computer",
+        "amount": 1000,
+        "discount": 150
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "/api/mobile/health": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": [
+    {
+     "id": 1,
+     "uuid": "h1",
+     "title": "Helped a classmate",
+     "status": "behavior",
+     "recordDate": "2026-10-20",
+     "studentId": 43,
+     "kind": "behavior",
+     "points": 2,
+     "note": "Helped a classmate"
+    },
+    {
+     "id": 2,
+     "uuid": "h2",
+     "title": "Sick bay",
+     "status": "sickbay",
+     "recordDate": "2026-10-15",
+     "studentId": 43,
+     "kind": "sickbay",
+     "note": "Headache. Rested 30 min."
+    }
+   ]
+  },
+  "/api/mobile/home": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": {
+    "children": [
+     {
+      "id": 43,
+      "name": "Ahmed Test",
+      "grNo": "GR-MC-0003",
+      "rollNo": null,
+      "classId": 17,
+      "className": "Class 5",
+      "section": "A",
+      "father": "Imran Test",
+      "mother": null,
+      "mobile": "0300-7654321",
+      "photoUrl": null,
+      "dob": "2016-03-14",
+      "gender": "M",
+      "address": "House 12, Street 4, Model Town",
+      "campusId": 4
+     },
+     {
+      "id": 42,
+      "name": "Ayesha Test",
+      "grNo": "GR-MC-0002",
+      "rollNo": null,
+      "classId": 17,
+      "className": "Class 5",
+      "section": "A",
+      "father": "Imran Test",
+      "mother": null,
+      "mobile": "0300-7654321",
+      "photoUrl": null,
+      "dob": "2016-03-14",
+      "gender": "F",
+      "address": "House 12, Street 4, Model Town",
+      "campusId": 4
+     }
+    ],
+    "student": {
+     "id": 43,
+     "name": "Ahmed Test",
+     "grNo": "GR-MC-0003",
+     "rollNo": null,
+     "classId": 17,
+     "className": "Class 5",
+     "section": "A",
+     "father": "Imran Test",
+     "mother": null,
+     "mobile": "0300-7654321",
+     "photoUrl": null,
+     "dob": "2016-03-14",
+     "gender": "M",
+     "address": "House 12, Street 4, Model Town",
+     "campusId": 4
+    },
+    "today": {
+     "date": "2026-11-02",
+     "attendance": "L",
+     "diary": [],
+     "homeworkDue": [
+      {
+       "id": 2,
+       "title": "My hero essay",
+       "dueDate": "2026-11-09"
+      },
+      {
+       "id": 1,
+       "title": "Fractions worksheet",
+       "dueDate": "2026-11-04"
+      }
+     ],
+     "periods": [
+      {
+       "period": 1,
+       "subjectId": 8
+      },
+      {
+       "period": 2,
+       "subjectId": 9
+      },
+      {
+       "period": 3,
+       "subjectId": 7
+      },
+      {
+       "period": 4,
+       "subjectId": 8
+      }
+     ],
+     "notices": [
+      {
+       "id": 3,
+       "title": "November fee vouchers issued",
+       "body": "Please pay before the 10th to avoid the late fine.",
+       "bodyUrdu": null
+      },
+      {
+       "id": 2,
+       "title": "PTM this month",
+       "body": "Meet the class teacher between 9 and 12 in the main hall.",
+       "bodyUrdu": "کلاس ٹیچر سے صبح ۹ سے ۱۲ بجے کے درمیان ملیں۔"
+      }
+     ],
+     "dues": 7225
+    }
+   }
+  },
+  "/api/mobile/homework": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": [
+    {
+     "id": 2,
+     "title": "My hero essay",
+     "body": "Write 150 words about your hero.",
+     "dueDate": "2026-11-09",
+     "subjectId": 7,
+     "subject": "English",
+     "status": "assigned",
+     "submission": null
+    },
+    {
+     "id": 1,
+     "title": "Fractions worksheet",
+     "body": "Solve Q1–10. Show working. Upload a clear photo of each page.",
+     "dueDate": "2026-11-04",
+     "subjectId": 8,
+     "subject": "Mathematics",
+     "status": "assigned",
+     "submission": null
+    }
+   ]
+  },
+  "/api/mobile/leave": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": [
+    {
+     "id": 1,
+     "kind": "student",
+     "leave_type": "Sick",
+     "from_date": "2026-10-14",
+     "to_date": "2026-10-15",
+     "days": 2,
+     "reason": "Fever",
+     "status": "approved",
+     "student_id": 43
+    }
+   ]
+  },
+  "/api/mobile/library": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": [
+    {
+     "id": 1,
+     "title": "Tales from Pakistan",
+     "issuedOn": "2026-10-20",
+     "dueOn": "2026-11-03",
+     "returnedOn": null,
+     "fine": 0
+    },
+    {
+     "id": 2,
+     "title": "The Secret Garden",
+     "issuedOn": "2026-09-01",
+     "dueOn": "2026-09-15",
+     "returnedOn": "2026-09-18",
+     "fine": 30
+    }
+   ]
+  },
+  "/api/mobile/notices": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": [
+    {
+     "id": 3,
+     "title": "November fee vouchers issued",
+     "body": "Please pay before the 10th to avoid the late fine.",
+     "bodyUrdu": null,
+     "audience": "parent",
+     "at": "2026-11-02T20:14:59.000Z"
+    },
+    {
+     "id": 2,
+     "title": "PTM this month",
+     "body": "Meet the class teacher between 9 and 12 in the main hall.",
+     "bodyUrdu": "کلاس ٹیچر سے صبح ۹ سے ۱۲ بجے کے درمیان ملیں۔",
+     "audience": "all",
+     "at": "2026-11-02T20:14:58.000Z"
+    }
+   ]
+  },
+  "/api/mobile/payments": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": [
+    {
+     "id": 5,
+     "receiptNo": "R-26-000005",
+     "amount": 8500,
+     "mode": "cash",
+     "date": "2026-10-06",
+     "reference": null,
+     "voucherId": 60
+    }
+   ]
+  },
+  "/api/mobile/pickup": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": [
+    {
+     "id": 1,
+     "uuid": "p1",
+     "title": "Imran Test",
+     "status": "Father",
+     "recordDate": "2026-10-29",
+     "notes": "35202-7654321-1",
+     "studentId": 43,
+     "name": "Imran Test",
+     "relation": "Father",
+     "cnic": "35202-7654321-1"
+    }
+   ]
+  },
+  "/api/mobile/profile": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": {
+    "id": 43,
+    "name": "Ahmed Test",
+    "grNo": "GR-MC-0003",
+    "rollNo": null,
+    "classId": 17,
+    "className": "Class 5",
+    "section": "A",
+    "father": "Imran Test",
+    "mother": null,
+    "mobile": "0300-7654321",
+    "photoUrl": null,
+    "dob": "2016-03-14",
+    "gender": "M",
+    "address": "House 12, Street 4, Model Town",
+    "campusId": 4
+   }
+  },
+  "/api/mobile/report-card": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": {
+    "student": {
+     "id": 43,
+     "name": "Ahmed Test",
+     "grNo": "GR-MC-0003",
+     "rollNo": null,
+     "classId": 17,
+     "className": "Class 5",
+     "section": "A",
+     "father": "Imran Test",
+     "mother": null,
+     "mobile": "0300-7654321",
+     "photoUrl": null,
+     "dob": "2016-03-14",
+     "gender": "M",
+     "address": "House 12, Street 4, Model Town",
+     "campusId": 4
+    },
+    "total": 272,
+    "max": 400,
+    "percentage": 68,
+    "grade": "B",
+    "position": null,
+    "subjects": [
+     {
+      "subject": "English",
+      "marks": 78,
+      "max": 100
+     },
+     {
+      "subject": "Mathematics",
+      "marks": 65,
+      "max": 100
+     },
+     {
+      "subject": "Urdu",
+      "marks": 70,
+      "max": 100
+     },
+     {
+      "subject": "Science",
+      "marks": 59,
+      "max": 100
+     }
+    ],
+    "school": "Science Base School",
+    "qr": "sms:report:43:latest"
+   }
+  },
+  "/api/mobile/results": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": {
+    "student": {
+     "id": 43,
+     "name": "Ahmed Test",
+     "grNo": "GR-MC-0003",
+     "rollNo": null,
+     "classId": 17,
+     "className": "Class 5",
+     "section": "A",
+     "father": "Imran Test",
+     "mother": null,
+     "mobile": "0300-7654321",
+     "photoUrl": null,
+     "dob": "2016-03-14",
+     "gender": "M",
+     "address": "House 12, Street 4, Model Town",
+     "campusId": 4
+    },
+    "total": 272,
+    "max": 400,
+    "percentage": 68,
+    "grade": "B",
+    "position": null,
+    "subjects": [
+     {
+      "subject": "English",
+      "marks": 78,
+      "max": 100
+     },
+     {
+      "subject": "Mathematics",
+      "marks": 65,
+      "max": 100
+     },
+     {
+      "subject": "Urdu",
+      "marks": 70,
+      "max": 100
+     },
+     {
+      "subject": "Science",
+      "marks": 59,
+      "max": 100
+     }
+    ]
+   }
+  },
+  "/api/mobile/settings": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": {
+    "locale": "en",
+    "notifications": true,
+    "rtl": false
+   }
+  },
+  "/api/mobile/surveys": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": [
+    {
+     "id": 1,
+     "uuid": "s1",
+     "title": "Term 1 feedback",
+     "status": "open",
+     "recordDate": "2026-10-25",
+     "questions": [
+      "How satisfied are you with teaching?",
+      "How safe is school transport?"
+     ]
+    }
+   ]
+  },
+  "/api/mobile/timetable": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": {
+    "days": [
+     "Mon",
+     "Tue",
+     "Wed",
+     "Thu",
+     "Fri",
+     "Sat"
+    ],
+    "periods": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8
+    ],
+    "slots": [
+     {
+      "day": "Fri",
+      "period": 1,
+      "subjectId": 8,
+      "subject": "Mathematics",
+      "staffId": 9
+     },
+     {
+      "day": "Fri",
+      "period": 2,
+      "subjectId": 9,
+      "subject": "Urdu",
+      "staffId": 9
+     },
+     {
+      "day": "Fri",
+      "period": 3,
+      "subjectId": 7,
+      "subject": "English",
+      "staffId": 9
+     },
+     {
+      "day": "Fri",
+      "period": 4,
+      "subjectId": 8,
+      "subject": "Mathematics",
+      "staffId": 9
+     },
+     {
+      "day": "Mon",
+      "period": 1,
+      "subjectId": 8,
+      "subject": "Mathematics",
+      "staffId": 9
+     },
+     {
+      "day": "Mon",
+      "period": 2,
+      "subjectId": 9,
+      "subject": "Urdu",
+      "staffId": 9
+     },
+     {
+      "day": "Mon",
+      "period": 3,
+      "subjectId": 7,
+      "subject": "English",
+      "staffId": 9
+     },
+     {
+      "day": "Mon",
+      "period": 4,
+      "subjectId": 8,
+      "subject": "Mathematics",
+      "staffId": 9
+     },
+     {
+      "day": "Thu",
+      "period": 1,
+      "subjectId": 8,
+      "subject": "Mathematics",
+      "staffId": 9
+     },
+     {
+      "day": "Thu",
+      "period": 2,
+      "subjectId": 9,
+      "subject": "Urdu",
+      "staffId": 9
+     },
+     {
+      "day": "Thu",
+      "period": 3,
+      "subjectId": 7,
+      "subject": "English",
+      "staffId": 9
+     },
+     {
+      "day": "Thu",
+      "period": 4,
+      "subjectId": 8,
+      "subject": "Mathematics",
+      "staffId": 9
+     },
+     {
+      "day": "Tue",
+      "period": 1,
+      "subjectId": 8,
+      "subject": "Mathematics",
+      "staffId": 9
+     },
+     {
+      "day": "Tue",
+      "period": 2,
+      "subjectId": 9,
+      "subject": "Urdu",
+      "staffId": 9
+     },
+     {
+      "day": "Tue",
+      "period": 3,
+      "subjectId": 7,
+      "subject": "English",
+      "staffId": 9
+     },
+     {
+      "day": "Tue",
+      "period": 4,
+      "subjectId": 8,
+      "subject": "Mathematics",
+      "staffId": 9
+     },
+     {
+      "day": "Wed",
+      "period": 1,
+      "subjectId": 8,
+      "subject": "Mathematics",
+      "staffId": 9
+     },
+     {
+      "day": "Wed",
+      "period": 2,
+      "subjectId": 9,
+      "subject": "Urdu",
+      "staffId": 9
+     },
+     {
+      "day": "Wed",
+      "period": 3,
+      "subjectId": 7,
+      "subject": "English",
+      "staffId": 9
+     },
+     {
+      "day": "Wed",
+      "period": 4,
+      "subjectId": 8,
+      "subject": "Mathematics",
+      "staffId": 9
+     }
+    ]
+   }
+  },
+  "/api/mobile/transport": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": {
+    "student": {
+     "id": 43,
+     "name": "Ahmed Test",
+     "grNo": "GR-MC-0003",
+     "rollNo": null,
+     "classId": 17,
+     "className": "Class 5",
+     "section": "A",
+     "father": "Imran Test",
+     "mother": null,
+     "mobile": "0300-7654321",
+     "photoUrl": null,
+     "dob": "2016-03-14",
+     "gender": "M",
+     "address": "House 12, Street 4, Model Town",
+     "campusId": 4
+    },
+    "route": {
+     "id": 3,
+     "name": "Route 3 · Model Town",
+     "fare": 3500
+    },
+    "vehicle": {
+     "plate": "LEA-4512",
+     "type": "Coaster",
+     "driver": "Muhammad Aslam",
+     "phone": "0301-2233445"
+    }
+   }
+  }
+ },
+ "student": {
+  "/api/mobile/admit-card": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": {
+    "school": "Science Base School",
+    "exam": {
+     "id": 1,
+     "name": "Mid-term 2026",
+     "startDate": "2026-10-12",
+     "endDate": "2026-10-20"
+    },
+    "student": {
+     "id": 42,
+     "name": "Ayesha Test",
+     "grNo": "GR-MC-0002",
+     "rollNo": null,
+     "classId": 17,
+     "className": "Class 5",
+     "section": "A",
+     "father": "Imran Test",
+     "mother": null,
+     "mobile": "0300-7654321",
+     "photoUrl": null,
+     "dob": "2016-03-14",
+     "gender": "F",
+     "address": "House 12, Street 4, Model Town",
+     "campusId": 4
+    },
+    "qr": "sms:admit:a2f5bb53-0898-4fbc-bd5e-facfbb47ef03:1"
+   }
+  },
+  "/api/mobile/attendance": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": {
+    "month": "2026-11",
+    "percentage": 80,
+    "present": 4,
+    "total": 5,
+    "days": [
+     {
+      "date": "2026-11-02",
+      "mark": "L"
+     },
+     {
+      "date": "2026-10-31",
+      "mark": "P"
+     },
+     {
+      "date": "2026-10-30",
+      "mark": "A"
+     },
+     {
+      "date": "2026-10-29",
+      "mark": "P"
+     },
+     {
+      "date": "2026-10-28",
+      "mark": "LV"
+     }
+    ]
+   }
+  },
+  "/api/mobile/auth/me": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": {
+    "id": "12",
+    "uuid": "d68d506d-5dda-4dad-b9b7-b8861ab1eed5",
+    "name": "Ayesha Test",
+    "email": "gr-mc-0002@student.local",
+    "role": "student",
+    "schoolId": "3",
+    "schoolName": "Science Base School",
+    "campusIds": [],
+    "staffId": null,
+    "mustChangePw": true,
+    "permissions": [],
+    "setupDone": true,
+    "plan": "trial",
+    "brandColor": "#e67120",
+    "impersonated": false,
+    "campuses": [
+     {
+      "id": "4",
+      "name": "Main Campus",
+      "code": "MC",
+      "activeSessionId": "3"
+     }
+    ],
+    "sessions": [
+     {
+      "id": "3",
+      "name": "2026-27",
+      "isCurrent": true,
+      "isClosed": false
+     }
+    ]
+   }
+  },
+  "/api/mobile/calendar": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": [
+    {
+     "id": 1,
+     "title": "Parent-teacher meeting",
+     "date": "2026-11-14",
+     "kind": "event"
+    },
+    {
+     "id": 2,
+     "title": "Final term exams begin",
+     "date": "2026-12-01",
+     "kind": "exam"
+    },
+    {
+     "id": 3,
+     "title": "Winter vacation",
+     "date": "2026-12-21",
+     "kind": "vacation"
+    },
+    {
+     "id": 4,
+     "title": "Quaid Day",
+     "date": "2026-12-25",
+     "kind": "holiday"
+    },
+    {
+     "id": 5,
+     "title": "Annual sports day",
+     "date": "2027-01-14",
+     "kind": "event"
+    }
+   ]
+  },
+  "/api/mobile/children": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": [
+    {
+     "id": 42,
+     "name": "Ayesha Test",
+     "grNo": "GR-MC-0002",
+     "rollNo": null,
+     "classId": 17,
+     "className": "Class 5",
+     "section": "A",
+     "father": "Imran Test",
+     "mother": null,
+     "mobile": "0300-7654321",
+     "photoUrl": null,
+     "dob": "2016-03-14",
+     "gender": "F",
+     "address": "House 12, Street 4, Model Town",
+     "campusId": 4
+    }
+   ]
+  },
+  "/api/mobile/diary": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": [
+    {
+     "id": 2,
+     "date": "2026-11-03",
+     "subjectId": 8,
+     "subject": "Mathematics",
+     "topic": "Fractions — Exercise 4.2",
+     "homework": "Q1–6 in notebook. Test on Monday."
+    },
+    {
+     "id": 1,
+     "date": "2026-11-03",
+     "subjectId": 7,
+     "subject": "English",
+     "topic": "Lesson 7 \"The Honest Woodcutter\"",
+     "homework": "Learn and write 10 new words in the copy."
+    }
+   ]
+  },
+  "/api/mobile/exams": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": {
+    "student": {
+     "id": 42,
+     "name": "Ayesha Test",
+     "grNo": "GR-MC-0002",
+     "rollNo": null,
+     "classId": 17,
+     "className": "Class 5",
+     "section": "A",
+     "father": "Imran Test",
+     "mother": null,
+     "mobile": "0300-7654321",
+     "photoUrl": null,
+     "dob": "2016-03-14",
+     "gender": "F",
+     "address": "House 12, Street 4, Model Town",
+     "campusId": 4
+    },
+    "exams": [
+     {
+      "id": 1,
+      "name": "Mid-term 2026",
+      "startDate": "2026-10-12",
+      "endDate": "2026-10-20",
+      "resultStatus": "draft"
+     }
+    ]
+   }
+  },
+  "/api/mobile/fees": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": {
+    "student": {
+     "id": 42,
+     "name": "Ayesha Test",
+     "grNo": "GR-MC-0002",
+     "rollNo": null,
+     "classId": 17,
+     "className": "Class 5",
+     "section": "A",
+     "father": "Imran Test",
+     "mother": null,
+     "mobile": "0300-7654321",
+     "photoUrl": null,
+     "dob": "2016-03-14",
+     "gender": "F",
+     "address": "House 12, Street 4, Model Town",
+     "campusId": 4
+    },
+    "children": [
+     {
+      "id": 42,
+      "name": "Ayesha Test",
+      "grNo": "GR-MC-0002",
+      "rollNo": null,
+      "classId": 17,
+      "className": "Class 5",
+      "section": "A",
+      "father": "Imran Test",
+      "mother": null,
+      "mobile": "0300-7654321",
+      "photoUrl": null,
+      "dob": "2016-03-14",
+      "gender": "F",
+      "address": "House 12, Street 4, Model Town",
+      "campusId": 4
+     }
+    ],
+    "dues": 7225,
+    "canPay": false,
+    "vouchers": [
+     {
+      "id": 60,
+      "voucherNo": "V-26-000002",
+      "uuid": "8e4e543a-c12d-4e75-8b96-6e2df424343a",
+      "month": "2026-11",
+      "title": "Fee 2026-11",
+      "type": "monthly",
+      "issueDate": "2026-11-01",
+      "dueDate": "2026-11-10",
+      "amount": 7225,
+      "paid": 0,
+      "balance": 7225,
+      "status": "unpaid",
+      "qr": "sms:voucher:8e4e543a-c12d-4e75-8b96-6e2df424343a",
+      "lines": [
+       {
+        "label": "Tuition",
+        "amount": 7500,
+        "discount": 1125
+       },
+       {
+        "label": "Computer",
+        "amount": 1000,
+        "discount": 150
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "/api/mobile/health": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": [
+    {
+     "id": 1,
+     "uuid": "h1",
+     "title": "Helped a classmate",
+     "status": "behavior",
+     "recordDate": "2026-10-20",
+     "studentId": 43,
+     "kind": "behavior",
+     "points": 2,
+     "note": "Helped a classmate"
+    },
+    {
+     "id": 2,
+     "uuid": "h2",
+     "title": "Sick bay",
+     "status": "sickbay",
+     "recordDate": "2026-10-15",
+     "studentId": 43,
+     "kind": "sickbay",
+     "note": "Headache. Rested 30 min."
+    }
+   ]
+  },
+  "/api/mobile/home": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": {
+    "children": [
+     {
+      "id": 42,
+      "name": "Ayesha Test",
+      "grNo": "GR-MC-0002",
+      "rollNo": null,
+      "classId": 17,
+      "className": "Class 5",
+      "section": "A",
+      "father": "Imran Test",
+      "mother": null,
+      "mobile": "0300-7654321",
+      "photoUrl": null,
+      "dob": "2016-03-14",
+      "gender": "F",
+      "address": "House 12, Street 4, Model Town",
+      "campusId": 4
+     }
+    ],
+    "student": {
+     "id": 42,
+     "name": "Ayesha Test",
+     "grNo": "GR-MC-0002",
+     "rollNo": null,
+     "classId": 17,
+     "className": "Class 5",
+     "section": "A",
+     "father": "Imran Test",
+     "mother": null,
+     "mobile": "0300-7654321",
+     "photoUrl": null,
+     "dob": "2016-03-14",
+     "gender": "F",
+     "address": "House 12, Street 4, Model Town",
+     "campusId": 4
+    },
+    "today": {
+     "date": "2026-11-02",
+     "attendance": "P",
+     "diary": [],
+     "homeworkDue": [
+      {
+       "id": 2,
+       "title": "My hero essay",
+       "dueDate": "2026-11-09"
+      },
+      {
+       "id": 1,
+       "title": "Fractions worksheet",
+       "dueDate": "2026-11-04"
+      }
+     ],
+     "periods": [
+      {
+       "period": 1,
+       "subjectId": 8
+      },
+      {
+       "period": 2,
+       "subjectId": 9
+      },
+      {
+       "period": 3,
+       "subjectId": 7
+      },
+      {
+       "period": 4,
+       "subjectId": 8
+      }
+     ],
+     "notices": [
+      {
+       "id": 2,
+       "title": "PTM this month",
+       "body": "Meet the class teacher between 9 and 12 in the main hall.",
+       "bodyUrdu": "کلاس ٹیچر سے صبح ۹ سے ۱۲ بجے کے درمیان ملیں۔"
+      }
+     ],
+     "dues": 7225
+    }
+   }
+  },
+  "/api/mobile/homework": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": [
+    {
+     "id": 2,
+     "title": "My hero essay",
+     "body": "Write 150 words about your hero.",
+     "dueDate": "2026-11-09",
+     "subjectId": 7,
+     "subject": "English",
+     "status": "assigned",
+     "submission": null
+    },
+    {
+     "id": 1,
+     "title": "Fractions worksheet",
+     "body": "Solve Q1–10. Show working. Upload a clear photo of each page.",
+     "dueDate": "2026-11-04",
+     "subjectId": 8,
+     "subject": "Mathematics",
+     "status": "assigned",
+     "submission": null
+    }
+   ]
+  },
+  "/api/mobile/leave": {
+   "status": 403,
+   "success": false,
+   "message": "This screen is not for this login.",
+   "data": [
+    {
+     "id": 1,
+     "kind": "student",
+     "leave_type": "Sick",
+     "from_date": "2026-10-14",
+     "to_date": "2026-10-15",
+     "days": 2,
+     "reason": "Fever",
+     "status": "approved",
+     "student_id": 43
+    }
+   ]
+  },
+  "/api/mobile/library": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": [
+    {
+     "id": 1,
+     "title": "Tales from Pakistan",
+     "issuedOn": "2026-10-20",
+     "dueOn": "2026-11-03",
+     "returnedOn": null,
+     "fine": 0
+    },
+    {
+     "id": 2,
+     "title": "The Secret Garden",
+     "issuedOn": "2026-09-01",
+     "dueOn": "2026-09-15",
+     "returnedOn": "2026-09-18",
+     "fine": 30
+    }
+   ]
+  },
+  "/api/mobile/notices": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": [
+    {
+     "id": 2,
+     "title": "PTM this month",
+     "body": "Meet the class teacher between 9 and 12 in the main hall.",
+     "bodyUrdu": "کلاس ٹیچر سے صبح ۹ سے ۱۲ بجے کے درمیان ملیں۔",
+     "audience": "all",
+     "at": "2026-11-02T20:14:58.000Z"
+    }
+   ]
+  },
+  "/api/mobile/payments": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": [
+    {
+     "id": 5,
+     "receiptNo": "R-26-000005",
+     "amount": 8500,
+     "mode": "cash",
+     "date": "2026-10-06",
+     "reference": null,
+     "voucherId": 60
+    }
+   ]
+  },
+  "/api/mobile/profile": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": {
+    "id": 42,
+    "name": "Ayesha Test",
+    "grNo": "GR-MC-0002",
+    "rollNo": null,
+    "classId": 17,
+    "className": "Class 5",
+    "section": "A",
+    "father": "Imran Test",
+    "mother": null,
+    "mobile": "0300-7654321",
+    "photoUrl": null,
+    "dob": "2016-03-14",
+    "gender": "F",
+    "address": "House 12, Street 4, Model Town",
+    "campusId": 4
+   }
+  },
+  "/api/mobile/report-card": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": {
+    "student": {
+     "id": 42,
+     "name": "Ayesha Test",
+     "grNo": "GR-MC-0002",
+     "rollNo": null,
+     "classId": 17,
+     "className": "Class 5",
+     "section": "A",
+     "father": "Imran Test",
+     "mother": null,
+     "mobile": "0300-7654321",
+     "photoUrl": null,
+     "dob": "2016-03-14",
+     "gender": "F",
+     "address": "House 12, Street 4, Model Town",
+     "campusId": 4
+    },
+    "total": 345,
+    "max": 400,
+    "percentage": 86.3,
+    "grade": "A+",
+    "position": null,
+    "subjects": [
+     {
+      "subject": "English",
+      "marks": 92,
+      "max": 100
+     },
+     {
+      "subject": "Mathematics",
+      "marks": 88,
+      "max": 100
+     },
+     {
+      "subject": "Urdu",
+      "marks": 81,
+      "max": 100
+     },
+     {
+      "subject": "Science",
+      "marks": 84,
+      "max": 100
+     }
+    ],
+    "school": "Science Base School",
+    "qr": "sms:report:42:latest"
+   }
+  },
+  "/api/mobile/results": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": {
+    "student": {
+     "id": 42,
+     "name": "Ayesha Test",
+     "grNo": "GR-MC-0002",
+     "rollNo": null,
+     "classId": 17,
+     "className": "Class 5",
+     "section": "A",
+     "father": "Imran Test",
+     "mother": null,
+     "mobile": "0300-7654321",
+     "photoUrl": null,
+     "dob": "2016-03-14",
+     "gender": "F",
+     "address": "House 12, Street 4, Model Town",
+     "campusId": 4
+    },
+    "total": 345,
+    "max": 400,
+    "percentage": 86.3,
+    "grade": "A+",
+    "position": null,
+    "subjects": [
+     {
+      "subject": "English",
+      "marks": 92,
+      "max": 100
+     },
+     {
+      "subject": "Mathematics",
+      "marks": 88,
+      "max": 100
+     },
+     {
+      "subject": "Urdu",
+      "marks": 81,
+      "max": 100
+     },
+     {
+      "subject": "Science",
+      "marks": 84,
+      "max": 100
+     }
+    ]
+   }
+  },
+  "/api/mobile/settings": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": {
+    "locale": "en",
+    "notifications": true,
+    "rtl": false
+   }
+  },
+  "/api/mobile/timetable": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": {
+    "days": [
+     "Mon",
+     "Tue",
+     "Wed",
+     "Thu",
+     "Fri",
+     "Sat"
+    ],
+    "periods": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8
+    ],
+    "slots": [
+     {
+      "day": "Fri",
+      "period": 1,
+      "subjectId": 8,
+      "subject": "Mathematics",
+      "staffId": 9
+     },
+     {
+      "day": "Fri",
+      "period": 2,
+      "subjectId": 9,
+      "subject": "Urdu",
+      "staffId": 9
+     },
+     {
+      "day": "Fri",
+      "period": 3,
+      "subjectId": 7,
+      "subject": "English",
+      "staffId": 9
+     },
+     {
+      "day": "Fri",
+      "period": 4,
+      "subjectId": 8,
+      "subject": "Mathematics",
+      "staffId": 9
+     },
+     {
+      "day": "Mon",
+      "period": 1,
+      "subjectId": 8,
+      "subject": "Mathematics",
+      "staffId": 9
+     },
+     {
+      "day": "Mon",
+      "period": 2,
+      "subjectId": 9,
+      "subject": "Urdu",
+      "staffId": 9
+     },
+     {
+      "day": "Mon",
+      "period": 3,
+      "subjectId": 7,
+      "subject": "English",
+      "staffId": 9
+     },
+     {
+      "day": "Mon",
+      "period": 4,
+      "subjectId": 8,
+      "subject": "Mathematics",
+      "staffId": 9
+     },
+     {
+      "day": "Thu",
+      "period": 1,
+      "subjectId": 8,
+      "subject": "Mathematics",
+      "staffId": 9
+     },
+     {
+      "day": "Thu",
+      "period": 2,
+      "subjectId": 9,
+      "subject": "Urdu",
+      "staffId": 9
+     },
+     {
+      "day": "Thu",
+      "period": 3,
+      "subjectId": 7,
+      "subject": "English",
+      "staffId": 9
+     },
+     {
+      "day": "Thu",
+      "period": 4,
+      "subjectId": 8,
+      "subject": "Mathematics",
+      "staffId": 9
+     },
+     {
+      "day": "Tue",
+      "period": 1,
+      "subjectId": 8,
+      "subject": "Mathematics",
+      "staffId": 9
+     },
+     {
+      "day": "Tue",
+      "period": 2,
+      "subjectId": 9,
+      "subject": "Urdu",
+      "staffId": 9
+     },
+     {
+      "day": "Tue",
+      "period": 3,
+      "subjectId": 7,
+      "subject": "English",
+      "staffId": 9
+     },
+     {
+      "day": "Tue",
+      "period": 4,
+      "subjectId": 8,
+      "subject": "Mathematics",
+      "staffId": 9
+     },
+     {
+      "day": "Wed",
+      "period": 1,
+      "subjectId": 8,
+      "subject": "Mathematics",
+      "staffId": 9
+     },
+     {
+      "day": "Wed",
+      "period": 2,
+      "subjectId": 9,
+      "subject": "Urdu",
+      "staffId": 9
+     },
+     {
+      "day": "Wed",
+      "period": 3,
+      "subjectId": 7,
+      "subject": "English",
+      "staffId": 9
+     },
+     {
+      "day": "Wed",
+      "period": 4,
+      "subjectId": 8,
+      "subject": "Mathematics",
+      "staffId": 9
+     }
+    ]
+   }
+  },
+  "/api/mobile/transport": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": {
+    "student": {
+     "id": 42,
+     "name": "Ayesha Test",
+     "grNo": "GR-MC-0002",
+     "rollNo": null,
+     "classId": 17,
+     "className": "Class 5",
+     "section": "A",
+     "father": "Imran Test",
+     "mother": null,
+     "mobile": "0300-7654321",
+     "photoUrl": null,
+     "dob": "2016-03-14",
+     "gender": "F",
+     "address": "House 12, Street 4, Model Town",
+     "campusId": 4
+    },
+    "route": {
+     "id": 3,
+     "name": "Route 3 · Model Town",
+     "fare": 3500
+    },
+    "vehicle": {
+     "plate": "LEA-4512",
+     "type": "Coaster",
+     "driver": "Muhammad Aslam",
+     "phone": "0301-2233445"
+    }
+   }
+  }
+ }
+}

@@ -26,7 +26,6 @@ import {
   BellButton,
   Button,
   Card,
-  Chips,
   Field,
   IconButton,
   InfoBanner,
@@ -55,7 +54,7 @@ import {
   useCampus,
   useStaffRole,
 } from '../../data/admin';
-import { DEMO_CODE, checkLogin } from '../auth';
+import { Logo, SchoolCodeField, usePasswordLogin } from '../auth';
 import { useAccess } from './menu';
 import { AdminReportsCenter } from './reports';
 
@@ -81,49 +80,34 @@ const ALWAYS_OPEN = ['AdminSearch', 'AdminStudentProfile', 'AdminStaffProfile', 
 
 function AdminSignIn() {
   const nav = useNav();
-  const { signIn } = useSession();
-  const [role, setRole] = useStaffRole();
-  const [id, setId] = useState('owner@bfs.edu.pk');
+  const { login, busy } = usePasswordLogin('admin');
+  const [id, setId] = useState('');
   const [pw, setPw] = useState('');
   const submit = () => {
     if (!id.trim()) {
       toast('Enter your email or mobile');
     } else if (pw.length < 6) {
       toast('Password must be at least 6 characters');
-    } else if (checkLogin('admin', pw === DEMO_CODE)) {
-      signIn('admin');
-      nav.reset('AdminTabs');
+    } else {
+      login(id.trim().toLowerCase(), pw);
     }
   };
   return (
     <Screen>
-      <View style={s.logo}>
-        <ShieldCheck size={28} color={colors.text} />
-      </View>
+      <Logo icon={ShieldCheck} />
       <Text style={s.h1}>School admin</Text>
       <Text style={s.sub}>Owner, Principal and staff. Your menu depends on your role.</Text>
-      <Field label="Email or mobile" icon={User} value={id} onChangeText={setId} autoCapitalize="none" />
+      <SchoolCodeField />
+      <Field label="Email or mobile" icon={User} value={id} onChangeText={setId} autoCapitalize="none" keyboardType="email-address" placeholder="owner@school.com" />
       <Field label="Password" icon={Lock} value={pw} onChangeText={setPw} secureTextEntry placeholder="••••••••" />
-      <Text style={s.label}>Demo: sign in as</Text>
-      <Chips
-        options={STAFF_ROLES.map(r => r.label)}
-        value={roleInfo(role).label}
-        onChange={label => {
-          const r = STAFF_ROLES.find(x => x.label === label);
-          if (r) {
-            setRole(r.key);
-            setId(`${r.key}@bfs.edu.pk`);
-          }
-        }}
-      />
-      <Button label="Sign in" onPress={submit} />
+      <Button label="Sign in" onPress={submit} loading={busy} />
       <Text style={s.forgot}>
         Forgot password?{' '}
-        <Text style={s.link} onPress={() => nav.push('TeacherReset')}>
+        <Text style={s.link} onPress={() => nav.push('TeacherReset', { key: id.trim() })}>
           Reset by SMS code
         </Text>
       </Text>
-      <InfoBanner icon={Lock} text={`Demo password: ${DEMO_CODE}. 5 wrong attempts lock the account for 15 minutes.`} />
+      <InfoBanner icon={Lock} text="5 wrong attempts lock the account for 15 minutes." />
     </Screen>
   );
 }

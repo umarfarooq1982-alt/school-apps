@@ -16,6 +16,7 @@ import { studentScreens } from '../src/screens/student';
 import { teacherScreens } from '../src/screens/teacher';
 import { adminScreens } from '../src/screens/admin';
 import { clearShared, Role, setShared } from '../src/store';
+const { setFakeRole } = require('./fixtures/server');
 
 type Case = { role: Role | null; name: string; lang: 'en' | 'ur' };
 
@@ -89,6 +90,31 @@ test.each(cases)('$name as $role ($lang)', async ({ role, name, lang }) => {
   clearShared();
   setShared('session.role', role);
   setShared('session.lang', lang);
+  setFakeRole(role || 'parent');
+  if (role) {
+    // A signed-in session so screens can call the (fake) API.
+    const serverRole = role === 'admin' ? 'owner' : role;
+    setShared('api.session', {
+      token: 'test.token.value',
+      exp: Math.floor(Date.now() / 1000) + 24 * 3600,
+      user: {
+        id: '1',
+        name: 'Test User',
+        role: serverRole,
+        schoolId: '3',
+        schoolName: 'Science Base School',
+        campusIds: ['4'],
+        staffId: role === 'teacher' ? '9' : null,
+        mustChangePw: false,
+        permissions: [],
+      },
+      schoolCode: 'SBS',
+      campusId: '4',
+      sessionId: '3',
+      campuses: [{ id: '4', name: 'Main Campus', code: 'MC', activeSessionId: '3' }],
+      sessions: [{ id: '3', name: '2026-27', isCurrent: true, isClosed: false }],
+    });
+  }
 
   let root!: ReactTestRenderer.ReactTestRenderer;
   await ReactTestRenderer.act(async () => {

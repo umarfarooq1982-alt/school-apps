@@ -5,6 +5,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleProp,
   StyleSheet,
@@ -133,6 +134,8 @@ type ScreenProps = {
   scroll?: boolean;
   header?: React.ReactNode;
   contentStyle?: StyleProp<ViewStyle>;
+  refreshing?: boolean; // pull-to-refresh, when onRefresh is set
+  onRefresh?: () => void;
 };
 
 export function Screen({
@@ -145,6 +148,8 @@ export function Screen({
   scroll = true,
   header,
   contentStyle,
+  refreshing,
+  onRefresh,
 }: ScreenProps) {
   const insets = useSafeAreaInsets();
   const inTabs = useContext(InTabsContext);
@@ -189,6 +194,16 @@ export function Screen({
       ]}
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
+      refreshControl={
+        onRefresh ? (
+          <RefreshControl
+            refreshing={!!refreshing}
+            onRefresh={onRefresh}
+            colors={[colors.primary]}
+            tintColor={colors.primary}
+          />
+        ) : undefined
+      }
     >
       {children}
     </ScrollView>

@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   BookOpen,
   Briefcase,
+  Building,
   ChevronRight,
   GraduationCap,
   Lock,
@@ -26,9 +27,14 @@ import {
 } from '../components/ui';
 import { colors, radius } from '../theme';
 import { ScreenMap, useNav, useParam } from '../navigation';
-import { Role, useSession } from '../store';
+import { Role, useSession, useShared } from '../store';
 import { useI18n } from '../i18n';
-import { PARENT, SCHOOL, STUDENT } from '../data/school';
+import { SCHOOL } from '../data/school';
+import { authApi, LoginResult } from '../api/mobile';
+import { completeSignIn, signOutEverywhere } from '../api/auth';
+import { errorMessage } from '../api/client';
+import { DEFAULT_SCHOOL_CODE } from '../api/config';
+import { getSession, loadSchoolCode, saveSchoolCode } from '../api/session';
 
 export const HOME_ROUTE: Record<Role, string> = {
   parent: 'ParentTabs',
@@ -37,44 +43,78 @@ export const HOME_ROUTE: Record<Role, string> = {
   admin: 'AdminTabs',
 };
 
-// Demo credentials until the API is connected.
-export const DEMO_CODE = '123456';
+const ROLE_LABEL: Record<Role, string> = {
+  parent: 'Parent',
+  student: 'Student',
+  teacher: 'Teacher',
+  admin: 'School admin',
+};
 
-// SOW 7.4: the account locks for 15 minutes after 5 failed logins.
-const MAX_FAILS = 5;
-const LOCK_MS = 15 * 60 * 1000;
-const guards: Record<string, { fails: number; until: number }> = {};
-
-export function checkLogin(key: string, ok: boolean): boolean {
-  const g = (guards[key] ??= { fails: 0, until: 0 });
-  const now = Date.now();
-  if (g.until > now) {
-    const mins = Math.ceil((g.until - now) / 60000);
-    toast(`Account locked. Try again in ${mins} min.`);
-    return false;
-  }
-  if (ok) {
-    g.fails = 0;
-    return true;
-  }
-  g.fails += 1;
-  if (g.fails >= MAX_FAILS) {
-    g.fails = 0;
-    g.until = now + LOCK_MS;
-    toast('5 wrong attempts. The account is locked for 15 minutes.');
-  } else {
-    toast(`Wrong code or password. ${MAX_FAILS - g.fails} attempts left.`);
-  }
-  return false;
+// School code shared by every sign-in screen and remembered on the phone.
+export function useSchoolCode() {
+  const [code, setCode] = useShared<string>('auth.schoolCode', '');
+  useEffect(() => {
+    if (!code) {
+      loadSchoolCode(DEFAULT_SCHOOL_CODE).then(setCode);
+    }
+  }, [code, setCode]);
+  return [code || DEFAULT_SCHOOL_CODE, setCode] as const;
 }
 
-function useEnter() {
+export function SchoolCodeField() {
+  const [code, setCode] = useSchoolCode();
+  return (
+    <Field
+      label="School code"
+      icon={Building}
+      value={code}
+      onChangeText={v => setCode(v.toUpperCase().trim())}
+      autoCapitalize="characters"
+      placeholder="e.g. SBS"
+    />
+  );
+}
+
+// Finishes any login: saves the session, then opens set-password (first
+// sign-in) or the app that matches the server role.
+export function useFinishLogin() {
   const nav = useNav();
-  const { signIn } = useSession();
-  return (role: Role) => {
-    signIn(role);
-    nav.reset(HOME_ROUTE[role]);
+  const { t } = useI18n();
+  return async (r: LoginResult, schoolCode: string, expected?: Role) => {
+    const role = await completeSignIn(r, schoolCode);
+    saveSchoolCode(schoolCode);
+    if (expected && role !== expected) {
+      toast(`${t('This is a')} ${t(ROLE_LABEL[role])} ${t('login. Opening that app.')}`);
+    }
+    if (r.user.mustChangePw) {
+      nav.reset('SetPassword', { first: true });
+    } else {
+      nav.reset(HOME_ROUTE[role]);
+    }
   };
+}
+
+// Password login shared by parent, student, teacher and admin.
+export function usePasswordLogin(expected: Role) {
+  const finish = useFinishLogin();
+  const [schoolCode] = useSchoolCode();
+  const [busy, setBusy] = useState(false);
+  const login = async (key: string, password: string) => {
+    if (!schoolCode) {
+      toast('Enter the school code');
+      return;
+    }
+    setBusy(true);
+    try {
+      const r = await authApi.login(key.trim(), password, schoolCode);
+      await finish(r, schoolCode, expected);
+    } catch (e) {
+      toast(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return { login, busy };
 }
 
 function LanguageSwitch() {
@@ -92,7 +132,7 @@ function LanguageSwitch() {
   );
 }
 
-function Logo({ icon: Icon = GraduationCap }: { icon?: IconType }) {
+export function Logo({ icon: Icon = GraduationCap }: { icon?: IconType }) {
   return (
     <View style={s.logo}>
       <Icon size={28} color={colors.text} strokeWidth={2} />
@@ -175,24 +215,44 @@ function RoleSelect() {
 
 // ---------- Parent ----------
 
+// Pakistani mobile as the server stores it ("0300-1234567"); it also
+// matches plain "03001234567" logins.
+function normaliseMobile(input: string) {
+  const digits = input.replace(/\D/g, '').replace(/^92/, '').replace(/^0/, '');
+  return digits.length === 10 ? `0${digits.slice(0, 3)}-${digits.slice(3)}` : input.trim();
+}
+
 function ParentSignIn() {
   const nav = useNav();
-  const enter = useEnter();
+  const [schoolCode] = useSchoolCode();
+  const { login, busy } = usePasswordLogin('parent');
   const [mode, setMode] = useState('Mobile + code');
-  const [mobile, setMobile] = useState('300 441 0000');
+  const [mobile, setMobile] = useState('');
   const [password, setPassword] = useState('');
+  const [sending, setSending] = useState(false);
 
-  const submit = () => {
+  const submit = async () => {
     if (mobile.replace(/\D/g, '').length < 10) {
       toast('Enter a valid mobile number');
       return;
     }
-    if (mode === 'Mobile + code') {
-      nav.push('ParentOtp', { mobile: `+92 ${mobile}` });
-    } else if (password.length < 6) {
-      toast('Password must be at least 6 characters');
-    } else if (checkLogin('parent', password === DEMO_CODE)) {
-      enter('parent');
+    const phone = normaliseMobile(mobile);
+    if (mode === 'Password') {
+      if (password.length < 6) {
+        toast('Password must be at least 6 characters');
+        return;
+      }
+      await login(phone, password);
+      return;
+    }
+    setSending(true);
+    try {
+      const r = await authApi.otpRequest(phone, schoolCode);
+      nav.push('ParentOtp', { mobile: phone, demoCode: r.demoCode, hint: r.hint });
+    } catch (e) {
+      toast(errorMessage(e));
+    } finally {
+      setSending(false);
     }
   };
 
@@ -201,6 +261,7 @@ function ParentSignIn() {
       <Logo />
       <Text style={s.h1}>{SCHOOL}</Text>
       <Text style={s.sub}>Parent app. One login for all your children.</Text>
+      <SchoolCodeField />
       <Segmented
         options={['Mobile + code', 'Password']}
         value={mode}
@@ -209,10 +270,10 @@ function ParentSignIn() {
       <Field
         label="Mobile number"
         icon={Phone}
-        prefix="+92"
         value={mobile}
         onChangeText={setMobile}
         keyboardType="phone-pad"
+        placeholder="0300 1234567"
       />
       {mode === 'Password' ? (
         <Field
@@ -228,9 +289,9 @@ function ParentSignIn() {
         label={mode === 'Password' ? 'Sign in' : 'Send code'}
         icon={mode === 'Password' ? undefined : ChevronRight}
         onPress={submit}
+        loading={busy || sending}
       />
-      <ForgotLink onPress={() => nav.push('ParentReset')} />
-      <InfoBanner text={`Demo: the SMS code and the password are ${DEMO_CODE}.`} />
+      <ForgotLink onPress={() => nav.push('ParentReset', { key: mobile ? normaliseMobile(mobile) : '' })} />
     </Screen>
   );
 }
@@ -266,21 +327,44 @@ function useCountdown(start: number) {
 }
 
 function ParentOtp() {
-  const mobile = useParam('mobile', '+92 300 441 0000');
-  const enter = useEnter();
+  const mobile = useParam('mobile', '');
+  const firstDemo = useParam<string | undefined>('demoCode', undefined);
+  const firstHint = useParam<string | undefined>('hint', undefined);
+  const finish = useFinishLogin();
+  const [schoolCode] = useSchoolCode();
   const { t } = useI18n();
   const [code, setCode] = useState('');
-  const [left, restart] = useCountdown(42);
+  const [left, restart] = useCountdown(60);
+  const [busy, setBusy] = useState(false);
+  const [demo, setDemo] = useState(firstDemo);
+  const [hint, setHint] = useState(firstHint);
 
-  const verify = () => {
+  const verify = async () => {
     if (code.length !== 6) {
       toast('Enter all 6 digits');
       return;
     }
-    if (checkLogin('parent', code === DEMO_CODE)) {
-      enter('parent');
-    } else {
+    setBusy(true);
+    try {
+      const r = await authApi.otpVerify(mobile, code, schoolCode);
+      await finish(r, schoolCode, 'parent');
+    } catch (e) {
       setCode('');
+      toast(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const resend = async () => {
+    try {
+      const r = await authApi.otpRequest(mobile, schoolCode);
+      setDemo(r.demoCode);
+      setHint(r.hint);
+      restart();
+      toast('New code sent');
+    } catch (e) {
+      toast(errorMessage(e));
     }
   };
 
@@ -288,128 +372,165 @@ function ParentOtp() {
     <Screen
       title="Enter the 6-digit code"
       subtitle={`Sent to ${mobile}`}
-      footer={<Button label="Verify and sign in" onPress={verify} />}
+      footer={<Button label="Verify and sign in" onPress={verify} loading={busy} />}
     >
       <Gap h={8} />
       <OtpInput value={code} onChange={setCode} />
       {left > 0 ? (
         <Text style={s.center}>
           {t('Resend code')} in{' '}
-          <Text style={s.bold}>0:{String(left).padStart(2, '0')}</Text>
+          <Text style={s.bold}>{`${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`}</Text>
         </Text>
       ) : (
-        <Text
-          style={[s.center, s.forgotLink]}
-          onPress={() => {
-            restart();
-            toast('New code sent');
-          }}
-        >
+        <Text style={[s.center, s.forgotLink]} onPress={resend}>
           {t('Resend code')}
         </Text>
       )}
-      <InfoBanner
-        icon={Lock}
-        text={`After 5 wrong attempts the account locks for 15 minutes. Demo code: ${DEMO_CODE}`}
-      />
+      {demo ? <InfoBanner tone="success" text={`Test server code: ${demo}`} /> : null}
+      {hint ? <InfoBanner text={hint} /> : null}
+      <InfoBanner icon={Lock} text="After 5 wrong attempts the account locks for 15 minutes." />
     </Screen>
   );
 }
 
+// Two steps: ask for a code, then enter it with the new password.
 function ResetPassword({
+  idLabel,
+  idIcon,
   sentTo,
-  askId,
+  keyboard = 'default',
 }: {
+  idLabel: string;
+  idIcon: IconType;
   sentTo: string;
-  askId?: boolean;
+  keyboard?: 'default' | 'phone-pad' | 'email-address';
 }) {
   const nav = useNav();
-  const [id, setId] = useState('0300 555 1212');
+  const [schoolCode] = useSchoolCode();
+  const [key, setKey] = useState(useParam('key', ''));
+  const [step, setStep] = useState<'ask' | 'set'>('ask');
+  const [demo, setDemo] = useState<string | undefined>();
   const [code, setCode] = useState('');
   const [pw, setPw] = useState('');
   const [pw2, setPw2] = useState('');
-  const save = () => {
-    if (code.length !== 6) {
-      toast('Enter the 6-digit code');
-    } else if (pw.length < 6) {
-      toast('Password must be at least 6 characters');
-    } else if (!askId && pw !== pw2) {
-      toast('Passwords do not match');
-    } else {
-      toast('Password changed. Please sign in again.');
-      nav.pop();
+  const [busy, setBusy] = useState(false);
+
+  const ask = async () => {
+    if (!key.trim()) {
+      toast(`Enter your ${idLabel.toLowerCase()}`);
+      return;
+    }
+    setBusy(true);
+    try {
+      const r = await authApi.resetRequest(key.trim(), schoolCode);
+      setDemo(r.demoCode);
+      setStep('set');
+      toast('Reset code sent');
+    } catch (e) {
+      toast(errorMessage(e));
+    } finally {
+      setBusy(false);
     }
   };
+
+  const save = async () => {
+    if (code.length !== 6) {
+      toast('Enter the 6-digit code');
+      return;
+    }
+    if (pw.length < 6) {
+      toast('Password must be at least 6 characters');
+      return;
+    }
+    if (pw !== pw2) {
+      toast('Passwords do not match');
+      return;
+    }
+    setBusy(true);
+    try {
+      await authApi.reset(key.trim(), code, pw, schoolCode);
+      toast('Password changed. Please sign in again.');
+      nav.pop();
+    } catch (e) {
+      toast(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <Screen
       title="Reset password"
-      footer={<Button label="Change password" onPress={save} />}
+      footer={
+        step === 'ask' ? (
+          <Button label="Send code" onPress={ask} loading={busy} />
+        ) : (
+          <Button label="Change password" onPress={save} loading={busy} />
+        )
+      }
     >
-      {askId ? (
-        <Field
-          label="Email or mobile"
-          icon={User}
-          value={id}
-          onChangeText={setId}
-        />
-      ) : null}
-      <Text style={s.sub}>
-        {askId ? `Code sent to ${id}.` : `We sent a 6-digit code to ${sentTo}.`}
-      </Text>
-      <OtpInput value={code} onChange={setCode} />
+      <SchoolCodeField />
       <Field
-        label="New password"
-        icon={Lock}
-        value={pw}
-        onChangeText={setPw}
-        secureTextEntry
-        placeholder="••••••••••"
+        label={idLabel}
+        icon={idIcon}
+        value={key}
+        onChangeText={setKey}
+        keyboardType={keyboard}
+        autoCapitalize="none"
+        editable={step === 'ask'}
       />
-      {askId ? null : (
-        <Field
-          label="Repeat new password"
-          icon={Lock}
-          value={pw2}
-          onChangeText={setPw2}
-          secureTextEntry
-          placeholder="••••••••••"
-        />
-      )}
-      {askId ? null : (
-        <InfoBanner
-          icon={Lock}
-          text="At least 6 characters. You will sign in again with the new password."
-        />
-      )}
+      {step === 'set' ? (
+        <>
+          <Text style={s.sub}>{`We sent a 6-digit code to ${sentTo}.`}</Text>
+          <OtpInput value={code} onChange={setCode} />
+          {demo ? <InfoBanner tone="success" text={`Test server code: ${demo}`} /> : null}
+          <Field
+            label="New password"
+            icon={Lock}
+            value={pw}
+            onChangeText={setPw}
+            secureTextEntry
+            placeholder="••••••••••"
+          />
+          <Field
+            label="Repeat new password"
+            icon={Lock}
+            value={pw2}
+            onChangeText={setPw2}
+            secureTextEntry
+            placeholder="••••••••••"
+          />
+          <InfoBanner
+            icon={Lock}
+            text="At least 6 characters. You will sign in again with the new password."
+          />
+          <Text style={[s.center, s.forgotLink]} onPress={ask}>
+            Resend code
+          </Text>
+        </>
+      ) : null}
     </Screen>
   );
 }
 
 function ParentReset() {
-  return <ResetPassword sentTo={PARENT.mobile} />;
+  return <ResetPassword idLabel="Mobile number" idIcon={Phone} sentTo="your mobile" keyboard="phone-pad" />;
 }
 
 // ---------- Student ----------
 
-let studentPasswordSet = false;
-let studentPassword = DEMO_CODE; // the school's first password
-
 function StudentSignIn() {
   const nav = useNav();
-  const enter = useEnter();
-  const [gr, setGr] = useState(STUDENT.gr);
+  const { login, busy } = usePasswordLogin('student');
+  const [gr, setGr] = useState('');
   const [pw, setPw] = useState('');
   const submit = () => {
     if (!gr.trim()) {
       toast('Enter your GR No.');
     } else if (pw.length < 6) {
       toast('Password must be at least 6 characters');
-    } else if (!checkLogin('student', pw === studentPassword)) {
-      return;
-    } else if (!studentPasswordSet) {
-      nav.push('StudentSetPassword', { current: pw });
     } else {
-      enter('student');
+      login(gr.trim().toUpperCase(), pw);
     }
   };
   return (
@@ -417,19 +538,21 @@ function StudentSignIn() {
       footer={
         <InfoBanner
           icon={Lock}
-          text={`First sign-in asks you to set your own password. Demo first password: ${DEMO_CODE}`}
+          text="First sign-in asks you to set your own password."
         />
       }
     >
       <Logo />
       <Text style={s.h1}>Hi there!{'\n'}Sign in to school</Text>
       <Text style={s.sub}>Use the GR No. on your ID card.</Text>
+      <SchoolCodeField />
       <Field
         label="GR No."
         icon={User}
         value={gr}
         onChangeText={setGr}
         autoCapitalize="characters"
+        placeholder="GR-MC-0012"
       />
       <Field
         label="Password"
@@ -439,41 +562,69 @@ function StudentSignIn() {
         secureTextEntry
         placeholder="••••••••"
       />
-      <Button label="Sign in" onPress={submit} />
+      <Button label="Sign in" onPress={submit} loading={busy} />
       <ForgotLink
         label="Ask for a code on parent's mobile"
-        onPress={() => nav.push('StudentReset')}
+        onPress={() => nav.push('StudentReset', { key: gr.trim().toUpperCase() })}
       />
     </Screen>
   );
 }
 
-function StudentSetPassword() {
-  const enter = useEnter();
-  const current = useParam('current', '');
-  const [cur, setCur] = useState(current);
+// First sign-in (mustChangePw) for any role, and the student design S02.
+function SetPassword() {
+  const nav = useNav();
+  const { role } = useSession();
+  const first = useParam('first', false);
+  const [cur, setCur] = useState('');
   const [pw, setPw] = useState('');
   const [pw2, setPw2] = useState('');
+  const [busy, setBusy] = useState(false);
+  const user = getSession()?.user;
   const long = pw.length >= 6;
-  const notGr = pw.length > 0 && pw.toUpperCase() !== STUDENT.gr;
-  const save = () => {
+  const notId = pw.length > 0 && pw.toUpperCase() !== (user?.name || '').toUpperCase() && pw !== cur;
+  const save = async () => {
     if (!cur) {
       toast('Enter the current password');
-    } else if (!long || !notGr) {
+      return;
+    }
+    if (!long || !notId) {
       toast('Choose a stronger password');
-    } else if (pw !== pw2) {
+      return;
+    }
+    if (pw !== pw2) {
       toast('Passwords do not match');
-    } else {
-      studentPasswordSet = true;
-      studentPassword = pw;
+      return;
+    }
+    setBusy(true);
+    try {
+      await authApi.changePassword(cur, pw);
       toast('Password saved');
-      enter('student');
+      nav.reset(role ? HOME_ROUTE[role] : 'RoleSelect');
+    } catch (e) {
+      toast(errorMessage(e));
+    } finally {
+      setBusy(false);
     }
   };
   return (
     <Screen
       title="Set your password"
-      footer={<Button label="Save password" onPress={save} />}
+      back={!first}
+      right={
+        first ? (
+          <Text
+            style={s.forgotLink}
+            onPress={async () => {
+              await signOutEverywhere();
+              nav.reset('RoleSelect');
+            }}
+          >
+            Sign out
+          </Text>
+        ) : undefined
+      }
+      footer={<Button label="Save password" onPress={save} loading={busy} />}
     >
       <Text style={s.sub}>
         The school gave you a first password. Make your own now.
@@ -501,7 +652,7 @@ function StudentSetPassword() {
       />
       <View style={s.rules}>
         <Rule ok={long} label="6+ characters" />
-        <Rule ok={notGr} label="Not your GR No." />
+        <Rule ok={notId} label="Not the old one" />
       </View>
     </Screen>
   );
@@ -518,25 +669,23 @@ function Rule({ ok, label }: { ok: boolean; label: string }) {
 }
 
 function StudentReset() {
-  return (
-    <ResetPassword sentTo={`your parent's mobile ${PARENT.mobile}`} />
-  );
+  return <ResetPassword idLabel="GR No." idIcon={User} sentTo="your parent's mobile" />;
 }
 
 // ---------- Teacher ----------
 
 function TeacherSignIn() {
   const nav = useNav();
-  const enter = useEnter();
-  const [id, setId] = useState('sadia.anwar@bfs.edu.pk');
+  const { login, busy } = usePasswordLogin('teacher');
+  const [id, setId] = useState('');
   const [pw, setPw] = useState('');
   const submit = () => {
     if (!id.trim()) {
       toast('Enter your email or mobile');
     } else if (pw.length < 6) {
       toast('Password must be at least 6 characters');
-    } else if (checkLogin('teacher', pw === DEMO_CODE)) {
-      enter('teacher');
+    } else {
+      login(id.includes('@') ? id.trim().toLowerCase() : normaliseMobile(id), pw);
     }
   };
   return (
@@ -544,13 +693,14 @@ function TeacherSignIn() {
       footer={
         <InfoBanner
           icon={WifiOff}
-          text={`Attendance works without internet and uploads later. Demo password: ${DEMO_CODE}`}
+          text="Attendance works without internet and uploads later."
         />
       }
     >
       <Logo icon={Briefcase} />
       <Text style={s.h1}>Teacher app</Text>
       <Text style={s.sub}>{SCHOOL}</Text>
+      <SchoolCodeField />
       <Field
         label="Email or mobile"
         icon={User}
@@ -558,6 +708,7 @@ function TeacherSignIn() {
         onChangeText={setId}
         autoCapitalize="none"
         keyboardType="email-address"
+        placeholder="name@school.edu.pk"
       />
       <Field
         label="Password"
@@ -567,14 +718,14 @@ function TeacherSignIn() {
         secureTextEntry
         placeholder="••••••••"
       />
-      <Button label="Sign in" onPress={submit} />
-      <ForgotLink onPress={() => nav.push('TeacherReset')} />
+      <Button label="Sign in" onPress={submit} loading={busy} />
+      <ForgotLink onPress={() => nav.push('TeacherReset', { key: id.trim() })} />
     </Screen>
   );
 }
 
 function TeacherReset() {
-  return <ResetPassword sentTo="" askId />;
+  return <ResetPassword idLabel="Email or mobile" idIcon={User} sentTo="your mobile or email" keyboard="email-address" />;
 }
 
 export const authScreens: ScreenMap = {
@@ -583,7 +734,8 @@ export const authScreens: ScreenMap = {
   ParentOtp,
   ParentReset,
   StudentSignIn,
-  StudentSetPassword,
+  SetPassword,
+  StudentSetPassword: SetPassword,
   StudentReset,
   TeacherSignIn,
   TeacherReset,

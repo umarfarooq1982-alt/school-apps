@@ -28,6 +28,9 @@ type Nav = {
 };
 
 const NavContext = createContext<Nav | null>(null);
+
+// The mounted navigator, for code outside React (e.g. a 401 from the API).
+export const rootNav: { current: Nav | null } = { current: null };
 const RouteContext = createContext<{ route: Route; focused: boolean } | null>(
   null,
 );
@@ -116,6 +119,7 @@ export function Navigator({
     () => ({ push, replace, reset, pop, popTo, canGoBack }),
     [push, replace, reset, pop, popTo, canGoBack],
   );
+  rootNav.current = nav;
 
   // Registered once, before any screen, so screen-level handlers
   // (registered later) always run first.

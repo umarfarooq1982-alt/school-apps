@@ -39,3 +39,10 @@ jest.mock('react-native-safe-area-context', () => {
   };
 });
 
+
+jest.mock('@react-native-async-storage/async-storage', () =>
+  require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
+);
+
+// Every request goes to the fake school API with captured responses.
+global.fetch = (...args) => require('./__tests__/fixtures/server').fakeFetch(...args);

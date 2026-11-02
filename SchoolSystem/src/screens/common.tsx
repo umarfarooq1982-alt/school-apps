@@ -6,6 +6,8 @@ import { Button, Field, IconButton, InfoBanner, Screen, toast } from '../compone
 import { colors } from '../theme';
 import { ScreenMap, useNav } from '../navigation';
 import { useSession } from '../store';
+import { authApi } from '../api/mobile';
+import { useMutation } from '../api/hooks';
 import { useI18n } from '../i18n';
 import {
   PARENT_PUSH,
@@ -87,22 +89,22 @@ function ChangePassword() {
   const [cur, setCur] = useState('');
   const [pw, setPw] = useState('');
   const [pw2, setPw2] = useState('');
-  const save = () => {
+  const { run, busy } = useMutation(authApi.changePassword, 'Password changed');
+  const save = async () => {
     if (!cur) {
       toast('Enter the current password');
     } else if (pw.length < 6) {
       toast('Password must be at least 6 characters');
     } else if (pw !== pw2) {
       toast('Passwords do not match');
-    } else {
-      toast('Password changed');
+    } else if ((await run(cur, pw)) !== undefined) {
       nav.pop();
     }
   };
   return (
     <Screen
       title="Change password"
-      footer={<Button label="Change password" onPress={save} />}
+      footer={<Button label="Change password" onPress={save} loading={busy} />}
     >
       <Field label="Current password" icon={Lock} value={cur} onChangeText={setCur} secureTextEntry />
       <Field label="New password" icon={Lock} value={pw} onChangeText={setPw} secureTextEntry />
