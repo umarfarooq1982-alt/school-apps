@@ -1,4 +1,4 @@
-name: Android APK
+name: Android apps
 
 on:
   push:
@@ -44,14 +44,50 @@ jobs:
       - name: Screen smoke tests
         run: npx jest --ci
 
-      - name: Build release APK
+      # Play upload key from GitHub secrets. Without it the builds are signed
+      # with the debug key: fine for phone testing, not accepted by Play.
+      - name: Restore upload keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then echo "No upload key secret: using the debug key"; exit 0; fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/upload.keystore"
+          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/upload.keystore" >> "$GITHUB_ENV"
+
+      # Four apps: parent, student, teacher, admin. APK to install on a phone,
+      # AAB to upload to Google Play.
+      - name: Build APKs and Play bundles
         working-directory: SchoolSystem/android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a,armeabi-v7a
+          ./gradlew assembleRelease bundleRelease --no-daemon             -PversionCode=${{ github.run_number }}             -PreactNativeArchitectures=arm64-v8a,armeabi-v7a,x86_64
+
+      - name: Collect files
+        run: |
+          mkdir -p out
+          for app in parent student teacher admin; do
+            cp android/app/build/outputs/apk/$app/release/app-$app-release.apk out/School-$app-${{ github.run_number }}.apk
+            cp android/app/build/outputs/bundle/${app}Release/app-$app-release.aab out/School-$app-${{ github.run_number }}.aab
+          done
+          if [ -n "$ANDROID_KEYSTORE_PATH" ]; then echo "Signed with the upload key" > out/SIGNING.txt; else echo "Signed with the DEBUG key - do not upload to Play" > out/SIGNING.txt; fi
+          ls -la out
 
       - uses: actions/upload-artifact@v4
         with:
-          name: SchoolSystem-apk-${{ github.run_number }}
-          path: SchoolSystem/android/app/build/outputs/apk/release/app-release.apk
+          name: School-apps-apk-${{ github.run_number }}
+          path: |
+            SchoolSystem/out/*.apk
+            SchoolSystem/out/SIGNING.txt
           retention-days: 14
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: School-apps-playstore-aab-${{ github.run_number }}
+          path: |
+            SchoolSystem/out/*.aab
+            SchoolSystem/out/SIGNING.txt
+          retention-days: 30

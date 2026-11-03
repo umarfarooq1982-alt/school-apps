@@ -78,13 +78,53 @@ android {
     compileSdk rootProject.ext.compileSdkVersion
 
     namespace "com.schoolsystem"
+    buildFeatures {
+        buildConfig true
+    }
     defaultConfig {
         applicationId "com.schoolsystem"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        // Play Store needs a higher versionCode for every upload: CI passes
+        // -PversionCode=<build number>.
+        versionCode((project.findProperty("versionCode") ?: "1") as Integer)
+        versionName "1.0.${project.findProperty("versionCode") ?: "1"}"
     }
+
+    // Four separate apps from one codebase. Each has its own package (its own
+    // Play Store listing), name and icon colour, and opens only its role.
+    flavorDimensions "role"
+    productFlavors {
+        parent {
+            dimension "role"
+            applicationId "com.schoolsystem.parent"
+            resValue "string", "app_name", "School Parent"
+            resValue "color", "ic_launcher_background", "#E8701E"
+            buildConfigField "String", "APP_ROLE", "\"parent\""
+        }
+        student {
+            dimension "role"
+            applicationId "com.schoolsystem.student"
+            resValue "string", "app_name", "School Student"
+            resValue "color", "ic_launcher_background", "#1F6FD1"
+            buildConfigField "String", "APP_ROLE", "\"student\""
+        }
+        teacher {
+            dimension "role"
+            applicationId "com.schoolsystem.teacher"
+            resValue "string", "app_name", "School Teacher"
+            resValue "color", "ic_launcher_background", "#1E8E5A"
+            buildConfigField "String", "APP_ROLE", "\"teacher\""
+        }
+        admin {
+            dimension "role"
+            applicationId "com.schoolsystem.admin"
+            resValue "string", "app_name", "School Admin"
+            resValue "color", "ic_launcher_background", "#2B2D42"
+            buildConfigField "String", "APP_ROLE", "\"admin\""
+        }
+    }
+
     signingConfigs {
         debug {
             storeFile file('debug.keystore')
@@ -92,15 +132,28 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        // Upload key for Google Play. Never committed: CI writes it from the
+        // ANDROID_KEYSTORE_BASE64 secret and passes the path and passwords as
+        // environment variables.
+        release {
+            def ks = System.getenv("ANDROID_KEYSTORE_PATH")
+            if (ks && file(ks).exists()) {
+                storeFile file(ks)
+                storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("ANDROID_KEY_ALIAS")
+                keyPassword System.getenv("ANDROID_KEY_PASSWORD")
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            // Signed with the Play upload key when CI has it, otherwise with
+            // the debug key (fine for testing, NOT accepted by Play).
+            def hasUploadKey = System.getenv("ANDROID_KEYSTORE_PATH") && file(System.getenv("ANDROID_KEYSTORE_PATH")).exists()
+            signingConfig hasUploadKey ? signingConfigs.release : signingConfigs.debug
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
         }

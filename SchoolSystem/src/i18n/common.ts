@@ -44,6 +44,11 @@ const common: Record<string, string> = {
   'Verify and sign in': 'تصدیق کریں اور سائن ان کریں',
   'Resend code': 'کوڈ دوبارہ بھیجیں',
   'Switch app': 'ایپ تبدیل کریں',
+  'login. Please use the': 'لاگ ان ہے۔ براہ کرم استعمال کریں',
+  'Parent app': 'پیرنٹ ایپ',
+  'Student app': 'اسٹوڈنٹ ایپ',
+  'Teacher app': 'ٹیچر ایپ',
+  'School Admin app': 'اسکول ایڈمن ایپ',
 
   // Common words
   Notices: 'نوٹس',

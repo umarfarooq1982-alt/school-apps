@@ -12,8 +12,17 @@ import { appRoleFor, signOutEverywhere } from './src/api/auth';
 import { HOME_ROUTE } from './src/screens/auth';
 import { toast } from './src/components/ui';
 import type { StaffRole } from './src/data/admin';
+import { getAppRole, setAppRole, SIGN_IN_ROUTE } from './src/appRole';
+import type { Role } from './src/store';
 
-function App() {
+type Props = { appRole?: Role };
+
+function App({ appRole }: Props) {
+  // The Android flavor decides the role; in a single-role app "RoleSelect"
+  // (where every sign-out returns) is that role's own sign-in screen.
+  setAppRole(appRole);
+  const fixed = getAppRole();
+  const appScreens = fixed ? { ...screens, RoleSelect: screens[SIGN_IN_ROUTE[fixed]] } : screens;
   const { isRTL } = useI18n();
   const [initial, setInitial] = useState<string | null>(null);
 
@@ -35,7 +44,12 @@ function App() {
     // Stay signed in across app restarts while the token is valid.
     restoreSession().then(s => {
       const role = s ? appRoleFor(s.user.role) : null;
-      if (s && role) {
+      const only = getAppRole();
+      if (s && role && only && role !== only) {
+        // A login saved by another role's app never opens here.
+        signOutEverywhere();
+        setInitial('RoleSelect');
+      } else if (s && role) {
         if (role === 'admin') {
           setShared<StaffRole>('admin.role', s.user.role as StaffRole);
         }
@@ -57,7 +71,7 @@ function App() {
       {/* Urdu flips the whole layout right-to-left without restarting the app. */}
       <View style={[styles.root, isRTL ? styles.rtl : styles.ltr]}>
         {initial ? (
-          <Navigator screens={screens} initial={initial} />
+          <Navigator screens={appScreens} initial={initial} />
         ) : (
           <View style={styles.splash}>
             <ActivityIndicator color={colors.primary} size="large" />

@@ -35,6 +35,7 @@ import { ApiError, errorMessage } from '../api/client';
 import { logoUri, lookupSchool, saveTenant, useSchoolName, useTenant } from '../api/tenant';
 import { DEFAULT_SCHOOL_CODE } from '../api/config';
 import { getSession, loadSchoolCode, saveSchoolCode } from '../api/session';
+import { APP_NAME, getAppRole } from '../appRole';
 
 export const HOME_ROUTE: Record<Role, string> = {
   parent: 'ParentTabs',
@@ -146,6 +147,13 @@ export function useFinishLogin() {
   return async (r: LoginResult, schoolCode: string, expected?: Role) => {
     const role = await completeSignIn(r, schoolCode);
     saveSchoolCode(schoolCode);
+    // Each Play Store app opens only its own role.
+    const fixed = getAppRole();
+    if (fixed && role !== fixed) {
+      await signOutEverywhere();
+      toast(`${t('This is a')} ${t(ROLE_LABEL[role])} ${t('login. Please use the')} ${t(APP_NAME[role])}.`);
+      return;
+    }
     if (expected && role !== expected) {
       toast(`${t('This is a')} ${t(ROLE_LABEL[role])} ${t('login. Opening that app.')}`);
     }
