@@ -1,13 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import {
-  CalendarDays,
-  Check,
-  Clock,
-  Plus,
-  RefreshCw,
-  WifiOff,
-} from 'lucide-react-native';
+import { CalendarDays, Check, Clock, Plus, RefreshCw, WifiOff, X } from 'lucide-react-native';
 import {
   Badge,
   Button,
@@ -27,56 +20,45 @@ import {
   Toggle,
 } from '../../components/ui';
 import { BottomSheet } from '../../components/Tabs';
+import { Empty, NoApiBanner, QueryView } from '../../components/states';
 import { colors } from '../../theme';
 import { useNav } from '../../navigation';
 import { useShared } from '../../store';
 import { useI18n } from '../../i18n';
-import {
-  ATT_DATES,
-  LATE_ARRIVALS,
-  STUDENTS_5A,
-  TStudent,
-} from '../../data/teacher';
-import {
-  newId,
-  useAttendanceMarked,
-  useEarlyLeaves,
-  useOffline,
-  useQueue,
-} from './state';
+import { useApi, useMutation } from '../../api/hooks';
+import { errorMessage } from '../../api/client';
+import { RosterDto, teacherApi } from '../../api/mobile';
+import { addDays, ClassChips, dayLabel, isoDate, MyClass, useMyClasses } from './common';
+import { AttendancePayload, newId, useOffline, useQueue } from './state';
 
 type Marks = Record<string, Mark>;
+type Student = RosterDto['students'][number];
 
-const defaultMarks = (): Marks => {
-  const m: Marks = {};
-  STUDENTS_5A.forEach(s => {
-    m[s.id] = 'P';
+const asMark = (m: string | null | undefined): Mark =>
+  m === 'A' || m === 'L' || m === 'LV' ? m : 'P';
+
+function counts(students: Student[], marks: Marks) {
+  const c = { P: 0, A: 0, L: 0, LV: 0 };
+  students.forEach(st => {
+    c[marks[st.id] ?? 'P'] += 1;
   });
-  return m;
-};
+  return c;
+}
 
-// Starting state for today mirrors the design (1 absent, 1 late, 2 leave).
-const todayMarks = (): Marks => ({
-  ...defaultMarks(),
-  s8: 'A',
-  s10: 'L',
-  s12: 'LV',
-  s20: 'LV',
-});
-
-function useDayMarks(date: string) {
-  return useShared<Marks>(
-    `teacher.att.${date}`,
-    date === ATT_DATES[0] ? todayMarks() : defaultMarks(),
+function useRoster(cls: MyClass | undefined, date: string) {
+  return useApi(cls ? `teacher.roster.${cls.key}.${date}` : null, () =>
+    teacherApi.roster(cls!.classId, cls!.section, date),
   );
 }
 
-function counts(marks: Marks) {
-  const c = { P: 0, A: 0, L: 0, LV: 0 };
-  Object.values(marks).forEach(m => {
-    c[m] += 1;
+// Server marks merged with the teacher's unsaved taps.
+function useDayMarks(cls: MyClass | undefined, date: string, roster?: RosterDto) {
+  const [edits, setEdits] = useShared<Marks>(`teacher.att.${cls?.key}.${date}`, {});
+  const marks: Marks = {};
+  (roster?.students || []).forEach(st => {
+    marks[st.id] = edits[st.id] ?? asMark(st.mark);
   });
-  return c;
+  return { marks, setMark: (id: string, m: Mark) => setEdits(p => ({ ...p, [id]: m })), clear: () => setEdits({}) };
 }
 
 function StudentMarkRow({
@@ -86,7 +68,7 @@ function StudentMarkRow({
   last,
   avatar = true,
 }: {
-  student: TStudent;
+  student: Student;
   value: Mark;
   onChange: (m: Mark) => void;
   last?: boolean;
@@ -96,7 +78,7 @@ function StudentMarkRow({
     <ListRow
       avatar={avatar ? student.name : undefined}
       title={student.name}
-      subtitle={`Roll ${student.roll}`}
+      subtitle={student.grNo}
       right={<MarkSelector value={value} onChange={onChange} />}
       last={last}
     />
@@ -112,7 +94,7 @@ function OfflineCard() {
         <WifiOff size={18} color={colors.text} />
         <View style={s.flex}>
           <Text style={s.rowTitle}>{t('Offline mode')}</Text>
-          <Text style={s.rowSub}>Simulate no internet on this phone</Text>
+          <Text style={s.rowSub}>Save on this phone and upload later</Text>
         </View>
         <Toggle value={offline} onChange={setOffline} />
       </View>
@@ -125,7 +107,7 @@ function OfflineBanner() {
     <InfoBanner
       tone="warn"
       icon={WifiOff}
-      text="You are offline. Attendance is saved on this phone and uploads automatically when the internet is back."
+      text="You are offline. Attendance is saved on this phone; tap Upload now when the internet is back."
     />
   );
 }
@@ -133,24 +115,30 @@ function OfflineBanner() {
 function QueueCard() {
   const [queue, setQueue] = useQueue();
   const [offline] = useOffline();
-  const waiting = queue.filter(q => q.status === 'Waiting').length;
-  const uploadNow = () => {
+  const [busy, setBusy] = useState(false);
+  const waiting = queue.filter(q => q.status !== 'Uploaded');
+  const uploadNow = async () => {
     if (offline) {
       toast('Still offline. Turn off offline mode to upload.');
       return;
     }
-    if (!waiting) {
+    if (!waiting.length) {
       toast('Nothing waiting to upload');
       return;
     }
-    setQueue(q =>
-      q.map(x =>
-        x.status === 'Waiting'
-          ? { ...x, status: 'Uploaded', sub: 'Uploaded just now' }
-          : x,
-      ),
-    );
-    toast(`${waiting} record(s) uploaded`);
+    setBusy(true);
+    let ok = 0;
+    for (const item of waiting) {
+      try {
+        await teacherApi.saveAttendance(item.payload);
+        ok += 1;
+        setQueue(q => q.map(x => (x.id === item.id ? { ...x, status: 'Uploaded', sub: 'Uploaded just now' } : x)));
+      } catch (e) {
+        setQueue(q => q.map(x => (x.id === item.id ? { ...x, status: 'Failed', sub: errorMessage(e) } : x)));
+      }
+    }
+    setBusy(false);
+    toast(`${ok} of ${waiting.length} uploaded`);
   };
   return (
     <>
@@ -161,30 +149,22 @@ function QueueCard() {
           queue.map((q, i) => (
             <ListRow
               key={q.id}
-              icon={q.status === 'Waiting' ? RefreshCw : Check}
-              iconTone={q.status === 'Waiting' ? 'primary' : 'success'}
+              icon={q.status === 'Uploaded' ? Check : q.status === 'Failed' ? X : RefreshCw}
+              iconTone={q.status === 'Uploaded' ? 'success' : q.status === 'Failed' ? 'danger' : 'primary'}
               title={q.title}
               subtitle={q.sub}
-              right={
-                <Badge
-                  label={q.status}
-                  tone={q.status === 'Waiting' ? 'warn' : 'success'}
-                />
-              }
+              right={<Badge label={q.status} tone={q.status === 'Uploaded' ? 'success' : q.status === 'Failed' ? 'danger' : 'warn'} />}
               last={i === queue.length - 1}
             />
           ))
         )}
       </Card>
-      <Button
-        label="Upload now"
-        variant="outline"
-        icon={RefreshCw}
-        onPress={uploadNow}
-      />
+      <Button label="Upload now" variant="outline" icon={RefreshCw} onPress={uploadNow} loading={busy} />
     </>
   );
 }
+
+const recentDays = () => Array.from({ length: 6 }, (_, i) => addDays(isoDate(), -i));
 
 function DatePickerSheet({
   visible,
@@ -198,159 +178,156 @@ function DatePickerSheet({
   onClose: () => void;
 }) {
   const { t } = useI18n();
+  const days = recentDays();
   return (
     <BottomSheet visible={visible} onClose={onClose}>
       <Text style={s.sheetTitle}>{t('Choose date')}</Text>
-      {ATT_DATES.map((d, i) => (
+      {days.map((d, i) => (
         <ListRow
           key={d}
           icon={CalendarDays}
-          title={d}
+          title={i === 0 ? `${t('Today')} · ${dayLabel(d)}` : dayLabel(d)}
           right={d === value ? <Check size={18} color={colors.text} /> : null}
           onPress={() => {
             onPick(d);
             onClose();
           }}
-          last={i === ATT_DATES.length - 1}
+          last={i === days.length - 1}
         />
       ))}
     </BottomSheet>
   );
 }
 
-// T05 + T06 + T07: the Attendance tab.
-export function TeacherAttendance() {
-  const nav = useNav();
-  const [mode, setMode] = useState('Daily');
-  const [date, setDate] = useState(ATT_DATES[0]);
-  const [picker, setPicker] = useState(false);
-  const [marks, setMarks] = useDayMarks(date);
+// Saves today's attendance, or queues it when offline.
+function useSaveAttendance(cls: MyClass | undefined, date: string, students: Student[], marks: Marks, after: () => void) {
   const [offline] = useOffline();
   const [, setQueue] = useQueue();
-  const [, setMarked] = useAttendanceMarked();
-  const c = counts(marks);
-  // SOW M-07: changes to a past day are corrections and need the Principal.
-  const isCorrection = date !== ATT_DATES[0];
-
-  const save = () => {
-    if (isCorrection) {
-      toast(`Correction for ${date} sent to the Principal for approval.`);
-      return;
-    }
-    if (offline) {
-      setQueue(q => [
-        {
-          id: newId('q'),
-          title: `Class 5-A · ${date}`,
-          sub: 'Saved on phone just now',
-          status: 'Waiting',
-        },
-        ...q,
-      ]);
-      toast('Saved on this phone. It uploads when you are online.');
-    } else {
-      toast(
-        c.A
-          ? `Attendance saved. SMS sent to parents of ${c.A} absent.`
-          : 'Attendance saved',
-      );
-    }
-    if (date === ATT_DATES[0]) {
-      setMarked(true);
-    }
+  const save = useMutation(teacherApi.saveAttendance);
+  return {
+    busy: save.busy,
+    run: async () => {
+      if (!cls || !students.length) {
+        toast('No students to mark');
+        return;
+      }
+      const payload: AttendancePayload = { classId: cls.classId, section: cls.section, date, marks: {} };
+      students.forEach(st => {
+        payload.marks[st.id] = marks[st.id] ?? 'P';
+      });
+      if (date < isoDate()) {
+        // SOW M-07: teachers cannot change old days; the server locks them too.
+        toast(`Previous days are locked. Ask the Principal to correct ${dayLabel(date)}.`);
+        return;
+      }
+      if (offline) {
+        setQueue(q => [
+          { id: newId('q'), title: `${cls.label} · ${dayLabel(date)}`, sub: 'Saved on phone just now', status: 'Waiting', payload },
+          ...q,
+        ]);
+        toast('Saved on this phone. Upload it when you are online.');
+        return;
+      }
+      const res = await save.run(payload);
+      if (res) {
+        const absent = Object.values(payload.marks).filter(m => m === 'A').length;
+        toast(absent ? `Attendance saved. Parents of ${absent} absent get SMS.` : 'Attendance saved');
+        after();
+      }
+    },
   };
+}
 
-  const daily = (
-    <>
-      {offline ? <OfflineBanner /> : null}
-      {isCorrection ? (
-        <InfoBanner
-          tone="warn"
-          icon={Clock}
-          text="This day is past the 10:00 cut-off. Changes go to the Principal as a correction request."
-        />
-      ) : null}
-      <HStack gap={8}>
-        <StatTile value={c.P} label="Present" />
-        <StatTile value={c.A} label="Absent" />
-        <StatTile value={c.L} label="Late" />
-        <StatTile value={c.LV} label="Leave" />
-      </HStack>
-      <Card>
-        {STUDENTS_5A.map((st, i) => (
-          <StudentMarkRow
-            key={st.id}
-            student={st}
-            value={marks[st.id] ?? 'P'}
-            onChange={m => setMarks(prev => ({ ...prev, [st.id]: m }))}
-            last={i === STUDENTS_5A.length - 1}
-          />
-        ))}
-      </Card>
-    </>
-  );
+// T05 + T07: the Attendance tab.
+export function TeacherAttendance() {
+  const nav = useNav();
+  const { t } = useI18n();
+  const [mode, setMode] = useState('Daily');
+  const [date, setDate] = useState(isoDate());
+  const [picker, setPicker] = useState(false);
+  const { classes, current, setPicked, today } = useMyClasses();
+  const roster = useRoster(current, date);
+  const students = roster.data?.students || [];
+  const { marks, setMark, clear } = useDayMarks(current, date, roster.data);
+  const [offline] = useOffline();
+  const c = counts(students, marks);
+  const isPast = date < isoDate();
+  const save = useSaveAttendance(current, date, students, marks, () => {
+    clear();
+    roster.refresh();
+  });
 
   return (
     <Screen
-      title="Class 5-A"
-      subtitle={`${date} · ${STUDENTS_5A.length} students`}
-      right={
-        <IconButton icon={CalendarDays} onPress={() => setPicker(true)} />
-      }
+      title={current?.label || t('Attendance')}
+      subtitle={`${dayLabel(date)} · ${students.length} ${t('students')}${roster.data?.marked ? ` · ${t('marked')}` : ''}`}
+      right={<IconButton icon={CalendarDays} onPress={() => setPicker(true)} />}
+      refreshing={roster.refreshing}
+      onRefresh={() => {
+        today.refresh();
+        roster.refresh();
+      }}
       footer={
-        mode === 'Daily' ? (
+        mode === 'Daily' && current ? (
           <Button
             icon={Check}
-            label={
-              isCorrection
-                ? 'Send correction to Principal'
-                : offline
-                ? 'Save on phone'
-                : `Save · parents of ${c.A} absent get SMS`
-            }
-            onPress={save}
+            label={isPast ? 'Ask Principal to correct' : offline ? 'Save on phone' : `Save · parents of ${c.A} absent get SMS`}
+            onPress={save.run}
+            loading={save.busy}
           />
         ) : undefined
       }
     >
-      <Segmented
-        options={['Daily', 'Period']}
-        value={mode}
-        onChange={setMode}
-      />
+      <Segmented options={['Daily', 'Period']} value={mode} onChange={setMode} />
+      <ClassChips classes={classes} value={current?.key} onChange={setPicked} />
       <HStack gap={8}>
-        <LinkChip
-          icon={Clock}
-          label="Late and early"
-          onPress={() => nav.push('TeacherLateEarly')}
-        />
-        <LinkChip
-          icon={WifiOff}
-          label="Offline & upload queue"
-          onPress={() => nav.push('TeacherOfflineAttendance')}
-        />
+        <LinkChip icon={Clock} label="Late and early" onPress={() => nav.push('TeacherLateEarly')} />
+        <LinkChip icon={WifiOff} label="Offline & upload queue" onPress={() => nav.push('TeacherOfflineAttendance')} />
       </HStack>
-      {mode === 'Daily' ? daily : <PeriodAttendanceBody />}
+      {mode === 'Daily' ? (
+        <QueryView q={today} isEmpty={() => classes.length === 0} emptyText="No class is assigned to you yet.">
+          {() => (
+            <>
+              {offline ? <OfflineBanner /> : null}
+              {isPast ? (
+                <InfoBanner tone="warn" icon={Clock} text="Previous days are locked for teachers. The Principal corrects old attendance." />
+              ) : null}
+              <QueryView q={roster} isEmpty={d => d.students.length === 0} emptyText="No active students in this class.">
+                {() => (
+                  <>
+                    <HStack gap={8}>
+                      <StatTile value={c.P} label="Present" />
+                      <StatTile value={c.A} label="Absent" />
+                      <StatTile value={c.L} label="Late" />
+                      <StatTile value={c.LV} label="Leave" />
+                    </HStack>
+                    <Card>
+                      {students.map((st, i) => (
+                        <StudentMarkRow
+                          key={st.id}
+                          student={st}
+                          value={marks[st.id] ?? 'P'}
+                          onChange={m => setMark(st.id, m)}
+                          last={i === students.length - 1}
+                        />
+                      ))}
+                    </Card>
+                  </>
+                )}
+              </QueryView>
+            </>
+          )}
+        </QueryView>
+      ) : (
+        <PeriodAttendanceBody />
+      )}
       {mode === 'Daily' ? <OfflineCard /> : null}
-      <DatePickerSheet
-        visible={picker}
-        value={date}
-        onPick={setDate}
-        onClose={() => setPicker(false)}
-      />
+      <DatePickerSheet visible={picker} value={date} onPick={setDate} onClose={() => setPicker(false)} />
     </Screen>
   );
 }
 
-function LinkChip({
-  icon: Icon,
-  label,
-  onPress,
-}: {
-  icon: typeof Clock;
-  label: string;
-  onPress: () => void;
-}) {
+function LinkChip({ icon: Icon, label, onPress }: { icon: typeof Clock; label: string; onPress: () => void }) {
   const { t } = useI18n();
   return (
     <Pressable onPress={onPress} style={s.linkChip}>
@@ -362,99 +339,90 @@ function LinkChip({
   );
 }
 
-// T06 as its own screen.
+// T06: offline marking and the upload queue.
 export function TeacherOfflineAttendance() {
   const [offline] = useOffline();
-  const [marks, setMarks] = useDayMarks(ATT_DATES[1]);
-  const [, setQueue] = useQueue();
-  const save = () => {
-    setQueue(q => [
-      {
-        id: newId('q'),
-        title: 'Class 5-A · Wed 21 Oct',
-        sub: offline ? 'Saved on phone just now' : 'Uploaded just now',
-        status: offline ? 'Waiting' : 'Uploaded',
-      },
-      ...q,
-    ]);
-    toast(offline ? 'Saved on this phone' : 'Attendance uploaded');
-  };
+  const date = isoDate();
+  const { classes, current, setPicked } = useMyClasses();
+  const roster = useRoster(current, date);
+  const students = roster.data?.students || [];
+  const { marks, setMark, clear } = useDayMarks(current, date, roster.data);
+  const save = useSaveAttendance(current, date, students, marks, () => {
+    clear();
+    roster.refresh();
+  });
   return (
     <Screen
-      title="Class 5-A"
-      subtitle="Wednesday 21 Oct"
-      footer={
-        <Button
-          icon={Check}
-          label={offline ? 'Save on phone' : 'Save attendance'}
-          onPress={save}
-        />
-      }
+      title={current?.label || 'Offline attendance'}
+      subtitle={dayLabel(date)}
+      footer={<Button icon={Check} label={offline ? 'Save on phone' : 'Save attendance'} onPress={save.run} loading={save.busy} />}
     >
       {offline ? (
         <OfflineBanner />
       ) : (
-        <InfoBanner
-          icon={Check}
-          tone="success"
-          text="You are online. Records upload straight away."
-        />
+        <InfoBanner icon={Check} tone="success" text="You are online. Records upload straight away." />
       )}
       <OfflineCard />
-      <Card>
-        {STUDENTS_5A.slice(0, 5).map((st, i) => (
-          <StudentMarkRow
-            key={st.id}
-            student={st}
-            avatar={false}
-            value={marks[st.id] ?? 'P'}
-            onChange={m => setMarks(prev => ({ ...prev, [st.id]: m }))}
-            last={i === 4}
-          />
-        ))}
-      </Card>
+      <ClassChips classes={classes} value={current?.key} onChange={setPicked} />
+      <QueryView q={roster} isEmpty={d => d.students.length === 0} emptyText="No active students in this class.">
+        {() => (
+          <Card>
+            {students.map((st, i) => (
+              <StudentMarkRow
+                key={st.id}
+                student={st}
+                avatar={false}
+                value={marks[st.id] ?? 'P'}
+                onChange={m => setMark(st.id, m)}
+                last={i === students.length - 1}
+              />
+            ))}
+          </Card>
+        )}
+      </QueryView>
       <QueueCard />
     </Screen>
   );
 }
 
-const PERIODS = ['P1', 'P2 · 8:40', 'P3', 'P4', 'P5'];
+const PERIODS = ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8'];
 
+// T07: the server has no per-period attendance API yet, so this stays on the phone.
 function PeriodAttendanceBody() {
-  const [period, setPeriod] = useState(PERIODS[1]);
-  const [all, setAll] = useShared<Record<string, Marks>>(
-    'teacher.periodAtt',
-    {},
-  );
-  const students = useMemo(() => STUDENTS_5A.slice(0, 12), []);
-  const marks: Marks =
-    all[period] ??
-    (period === PERIODS[1] ? { ...defaultMarks(), s9: 'A' } : defaultMarks());
+  const [period, setPeriod] = useState(PERIODS[0]);
+  const date = isoDate();
+  const { current } = useMyClasses();
+  const roster = useRoster(current, date);
+  const [all, setAll] = useShared<Record<string, Marks>>('teacher.periodAtt', {});
+  const students = roster.data?.students || [];
+  const marks: Marks = all[`${current?.key}.${period}`] || {};
   const set = (id: string, m: Mark) =>
-    setAll(prev => ({ ...prev, [period]: { ...marks, [id]: m } }));
+    setAll(prev => ({ ...prev, [`${current?.key}.${period}`]: { ...marks, [id]: m } }));
   const absent = students.filter(st => marks[st.id] === 'A').length;
   return (
     <>
-      <Text style={s.rowSub}>Class 6-A · {period.split(' ')[0]} · English</Text>
+      <NoApiBanner what="Period attendance" />
+      <Text style={s.rowSub}>
+        {current?.label} · {period}
+      </Text>
       <Chips options={PERIODS} value={period} onChange={setPeriod} />
-      <Card>
-        {students.map((st, i) => (
-          <StudentMarkRow
-            key={st.id}
-            student={st}
-            avatar={false}
-            value={marks[st.id] ?? 'P'}
-            onChange={m => set(st.id, m)}
-            last={i === students.length - 1}
-          />
-        ))}
-      </Card>
-      <Button
-        label="Save period attendance"
-        onPress={() =>
-          toast(`${period.split(' ')[0]} saved · ${absent} absent`)
-        }
-      />
+      <QueryView q={roster} isEmpty={d => d.students.length === 0} emptyText="No active students in this class.">
+        {() => (
+          <Card>
+            {students.map((st, i) => (
+              <StudentMarkRow
+                key={st.id}
+                student={st}
+                avatar={false}
+                value={marks[st.id] ?? 'P'}
+                onChange={m => set(st.id, m)}
+                last={i === students.length - 1}
+              />
+            ))}
+          </Card>
+        )}
+      </QueryView>
+      <Button label="Save period attendance" onPress={() => toast(`${period} saved on this phone · ${absent} absent`)} />
     </>
   );
 }
@@ -462,95 +430,129 @@ function PeriodAttendanceBody() {
 // T07 as its own screen.
 export function TeacherPeriodAttendance() {
   return (
-    <Screen title="Period attendance" subtitle="Class 6-A · English">
+    <Screen title="Period attendance">
       <PeriodAttendanceBody />
     </Screen>
   );
 }
 
-// T08
-export function TeacherLateEarly() {
-  const [times, setTimes] = useShared<Record<string, string>>(
-    'teacher.lateTimes',
-    Object.fromEntries(LATE_ARRIVALS.map(l => [l.id, l.time])),
-  );
-  const [early, setEarly] = useEarlyLeaves();
-  const [sheet, setSheet] = useState(false);
-  const [name, setName] = useState('');
-  const [time, setTime] = useState('');
-  const [by, setBy] = useState('');
+const isTime = (v: string) => /^\d{1,2}:\d{2}$/.test(v.trim());
 
-  const saveTimes = () => {
-    const bad = Object.values(times).some(v => !/^\d{1,2}:\d{2}$/.test(v));
-    if (bad) {
+// T08: late arrival time for students marked Late, and early departures.
+export function TeacherLateEarly() {
+  const date = isoDate();
+  const { current } = useMyClasses();
+  const roster = useRoster(current, date);
+  const students = roster.data?.students || [];
+  const { marks } = useDayMarks(current, date, roster.data);
+  const late = students.filter(st => marks[st.id] === 'L');
+  const [times, setTimes] = useShared<Record<string, string>>('teacher.lateTimes', {});
+  const [early, setEarly] = useShared<Array<{ id: string; name: string; time: string }>>('teacher.early', []);
+  const [sheet, setSheet] = useState(false);
+  const [pick, setPick] = useState('');
+  const [time, setTime] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const saveTimes = async () => {
+    if (!late.length) {
+      toast('No student is marked Late today');
+      return;
+    }
+    if (late.some(st => !isTime(times[st.id] || ''))) {
       toast('Enter times like 8:21');
       return;
     }
-    toast('Arrival times saved');
+    setBusy(true);
+    try {
+      for (const st of late) {
+        await teacherApi.exception({ studentId: Number(st.id), type: 'late', time: times[st.id], date });
+      }
+      toast('Arrival times saved');
+    } catch (e) {
+      toast(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
   };
 
-  const addEarly = () => {
-    if (!name.trim() || !time.trim() || !by.trim()) {
-      toast('Fill student, time and picked up by');
+  const addEarly = async () => {
+    const st = students.find(x => `${x.name} · ${x.grNo}` === pick);
+    if (!st || !isTime(time)) {
+      toast('Choose the student and a time like 11:20');
       return;
     }
-    setEarly(e => [...e, { id: newId('e'), name, time, by }]);
-    setName('');
-    setTime('');
-    setBy('');
-    setSheet(false);
-    toast('Early leave recorded');
+    setBusy(true);
+    try {
+      await teacherApi.exception({ studentId: Number(st.id), type: 'early', time: time.trim(), date });
+      setEarly(e => [...e, { id: newId('e'), name: st.name, time: time.trim() }]);
+      setPick('');
+      setTime('');
+      setSheet(false);
+      toast('Early leave recorded');
+    } catch (e) {
+      toast(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
-    <Screen title="Late and early" subtitle="Class 5-A · Thu 22 Oct">
+    <Screen title="Late and early" subtitle={`${current?.label || ''} · ${dayLabel(date)}`}>
       <Card title="Late arrivals: time arrived">
-        {LATE_ARRIVALS.map((l, i) => (
-          <ListRow
-            key={l.id}
-            avatar={l.name}
-            title={l.name}
-            subtitle="Marked Late"
-            right={
-              <View style={s.timeBox}>
-                <Field
-                  value={times[l.id]}
-                  onChangeText={v => setTimes(p => ({ ...p, [l.id]: v }))}
-                  keyboardType="numbers-and-punctuation"
-                  style={s.timeInput}
-                />
-              </View>
-            }
-            last={i === LATE_ARRIVALS.length - 1}
-          />
-        ))}
+        {late.length === 0 ? (
+          <Empty text="No student is marked Late today. Mark Late in Attendance first." />
+        ) : (
+          late.map((st, i) => (
+            <ListRow
+              key={st.id}
+              avatar={st.name}
+              title={st.name}
+              subtitle="Marked Late"
+              right={
+                <View style={s.timeBox}>
+                  <Field
+                    value={times[st.id] || ''}
+                    onChangeText={v => setTimes(p => ({ ...p, [st.id]: v }))}
+                    keyboardType="numbers-and-punctuation"
+                    placeholder="8:20"
+                    style={s.timeInput}
+                  />
+                </View>
+              }
+              last={i === late.length - 1}
+            />
+          ))
+        )}
       </Card>
       <Card title="Early departures today">
-        {early.map((e, i) => (
-          <ListRow
-            key={e.id}
-            avatar={e.name}
-            title={e.name}
-            subtitle={`Left ${e.time} · picked up by ${e.by}`}
-            right={<Badge label="Gate pass" tone="warn" />}
-            last={i === early.length - 1}
-          />
-        ))}
+        {early.length === 0 ? (
+          <Empty text="No early departures recorded." />
+        ) : (
+          early.map((e, i) => (
+            <ListRow
+              key={e.id}
+              avatar={e.name}
+              title={e.name}
+              subtitle={`Left ${e.time}`}
+              right={<Badge label="Recorded" tone="warn" />}
+              last={i === early.length - 1}
+            />
+          ))
+        )}
       </Card>
-      <Button
-        label="Record early leave"
-        variant="outline"
-        icon={Plus}
-        onPress={() => setSheet(true)}
-      />
-      <Button label="Save arrival times" onPress={saveTimes} />
+      <Button label="Record early leave" variant="outline" icon={Plus} onPress={() => setSheet(true)} />
+      <Button label="Save arrival times" onPress={saveTimes} loading={busy} />
       <BottomSheet visible={sheet} onClose={() => setSheet(false)}>
         <View style={s.sheetBody}>
           <Text style={s.sheetTitle}>Record early leave</Text>
-          <Field label="Student" value={name} onChangeText={setName} placeholder="Full name" />
+          {students.length ? (
+            <Chips options={students.map(x => `${x.name} · ${x.grNo}`)} value={pick} onChange={setPick} />
+          ) : (
+            <Empty text="No students loaded." />
+          )}
           <Field label="Time left" value={time} onChangeText={setTime} placeholder="11:20" keyboardType="numbers-and-punctuation" />
-          <Field label="Picked up by" value={by} onChangeText={setBy} placeholder="Name (relation)" />
-          <Button label="Save" onPress={addEarly} />
+          <InfoBanner text="The gate pass and pickup person are checked at the front desk." />
+          <Button label="Save" onPress={addEarly} loading={busy} />
         </View>
       </BottomSheet>
     </Screen>
@@ -562,12 +564,7 @@ const s = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   rowTitle: { fontSize: 14, fontWeight: '700', color: colors.text },
   rowSub: { fontSize: 12.5, color: colors.textMuted },
-  sheetTitle: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: colors.text,
-    marginBottom: 6,
-  },
+  sheetTitle: { fontSize: 17, fontWeight: '800', color: colors.text, marginBottom: 6 },
   sheetBody: { gap: 12 },
   linkChip: {
     flex: 1,
@@ -579,13 +576,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 9,
   },
-  linkChipText: {
-    flexShrink: 1,
-    fontSize: 12.5,
-    fontWeight: '800',
-    color: colors.primaryText,
-  },
+  linkChipText: { flexShrink: 1, fontSize: 12.5, fontWeight: '800', color: colors.primaryText },
   timeBox: { width: 90 },
   timeInput: { textAlign: 'center', fontWeight: '800' },
 });
-

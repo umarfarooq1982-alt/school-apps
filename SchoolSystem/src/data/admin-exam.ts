@@ -2,6 +2,10 @@
 // result compilation. The calculation functions are pure so they can be
 // unit tested against a manual calculation (SOW 10.4).
 import { useShared } from '../store';
+import { useApi } from '../api/hooks';
+import { ModuleRow, field, webA } from '../api/webA';
+import { useLiveStudents } from './admin-frontdesk';
+import { useModuleList } from '../screens/admin/owner/shared';
 import { ADMIN_STAFF, ADMIN_STUDENTS } from './admin';
 
 // ---------- Setup ----------
@@ -187,26 +191,50 @@ export function classMarks(cls: string, term: string): StudentMarks[] {
 
 // ---------- Date sheet, invigilation, seating ----------
 
-export type Paper = { id: string; cls: string; subject: string; date: string; time: string };
+export type Paper = { id: string; examId: string; cls: string; subject: string; date: string; time: string };
 
 export const DATES = ['Mon 1 Dec', 'Tue 2 Dec', 'Wed 3 Dec', 'Thu 4 Dec', 'Fri 5 Dec', 'Mon 8 Dec'];
 export const TIMES = ['8:30 – 11:00', '11:30 – 1:30'];
 
-const PAPERS_SEED: Paper[] = RESULT_CLASSES.flatMap(cls =>
-  RESULT_SUBJECTS.map((s, i) => ({ id: `${cls}-${s.name}`, cls, subject: s.name, date: DATES[i], time: TIMES[0] })),
-);
+// ISO dates (Monday to Saturday) from start to end, or the next six school
+// days when the exam has no dates yet.
+export function examDays(start?: string, end?: string): string[] {
+  const iso = /^\d{4}-\d{2}-\d{2}$/;
+  const from = start && iso.test(start) ? new Date(`${start}T00:00:00Z`) : new Date();
+  const to = end && iso.test(end) ? new Date(`${end}T00:00:00Z`) : null;
+  const out: string[] = [];
+  const d = new Date(from);
+  while (out.length < 20 && (to ? d <= to : out.length < 6)) {
+    if (d.getUTCDay() !== 0) {
+      out.push(d.toISOString().slice(0, 10));
+    }
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+  return out.length ? out : [new Date().toISOString().slice(0, 10)];
+}
 
-export const usePapers = () => useShared<Paper[]>('exam.papers', PAPERS_SEED);
-export const usePublished = () => useShared<Record<string, boolean>>('exam.published', { 'Class 5': true });
+export const useExams = () => useModuleList<LiveExam>('exams', toLiveExam, e => ({ name: e.name, startDate: e.start || null, endDate: e.end || null, marksOpen: e.marksOpen }));
+
+// Date sheet papers: "datesheet" module records.
+export const usePapers = () =>
+  useModuleList<Paper>(
+    'datesheet',
+    r => ({ id: String(r.id), examId: field(r, 'examId'), cls: field(r, 'cls'), subject: field(r, 'subject', 'title'), date: field(r, 'date', 'record_date', 'recordDate'), time: field(r, 'time') }),
+    p => ({ title: p.subject, status: 'scheduled', date: p.date, examId: p.examId, cls: p.cls, subject: p.subject, time: p.time }),
+  );
+export const usePublished = () => useShared<Record<string, boolean>>('exam.published', {});
 
 export const ROOMS = ['Hall A', 'Hall B', 'Room 2', 'Room 4'];
 export const TEACHERS = ADMIN_STAFF.filter(s => s.department === 'Academics' && s.status !== 'Left').map(s => s.name);
 
+// Invigilation duties: "invigilation" module records (one per date and room).
 export type Duty = { id: string; date: string; room: string; teacher: string };
-const DUTY_SEED: Duty[] = DATES.slice(0, 5).flatMap((d, i) =>
-  ROOMS.map((r, j) => ({ id: `${d}-${r}`, date: d, room: r, teacher: TEACHERS[(i * 4 + j) % TEACHERS.length] })),
-);
-export const useDuties = () => useShared<Duty[]>('exam.duties', DUTY_SEED);
+export const useDuties = () =>
+  useModuleList<Duty>(
+    'invigilation',
+    r => ({ id: String(r.id), date: field(r, 'date', 'record_date', 'recordDate'), room: field(r, 'room'), teacher: field(r, 'teacher', 'title') }),
+    d => ({ title: d.teacher, status: 'assigned', date: d.date, room: d.room, teacher: d.teacher }),
+  );
 
 // ---------- Marks entry progress ----------
 
@@ -239,3 +267,64 @@ export const useResultState = () => useShared<Record<string, ResultState>>('exam
 
 export const useAdmitReleases = () => useShared<Record<string, string>>('exam.admitRelease', {});
 export const useAdmitGenerated = () => useShared<Record<string, boolean>>('exam.admitGenerated', {});
+
+// ---------- Live exams and marks from the school server ----------
+// Exams are /api/web/modules/exams rows; marks come from /api/web/results per
+// exam. Results are compiled here with the school's grading and pass rules.
+
+export type LiveExam = { id: string; name: string; start: string; end: string; marksOpen: boolean; locked: boolean; status: string };
+
+export const toLiveExam = (r: ModuleRow): LiveExam => ({
+  id: String(r.id),
+  name: field(r, 'name'),
+  start: field(r, 'start_date', 'startDate'),
+  end: field(r, 'end_date', 'endDate'),
+  marksOpen: !!(r.marks_open ?? r.marksOpen),
+  locked: !!(r.is_locked ?? r.isLocked),
+  status: field(r, 'result_status', 'status') || 'draft',
+});
+
+export type ClassResults = {
+  students: StudentMarks[];
+  subjects: SubjectMax[];
+};
+
+export type ExamResults = { exam: LiveExam; byClass: Record<string, ClassResults> };
+
+// Every exam with its marks grouped by class (results cards carry the section
+// only, so the class comes from the live students list).
+export function useLiveResults() {
+  const { list: students, q: studentsQ } = useLiveStudents();
+  const q = useApi('adm:results:all', async () => {
+    const rows = await webA.modules('exams');
+    const exams = rows.map(toLiveExam);
+    const res = await Promise.all(exams.map(e => webA.results(e.id).catch(() => null)));
+    return exams.map((exam, i) => ({ exam, cards: res[i]?.cards ?? [] }));
+  });
+  const classOf = new Map(students.map(s => [s.id, s.className]));
+  const results: ExamResults[] = (q.data ?? []).map(({ exam, cards }) => {
+    const byClass: Record<string, ClassResults> = {};
+    cards.forEach(c => {
+      const cls = classOf.get(String(c.studentId)) ?? 'Unassigned';
+      const bucket = (byClass[cls] ??= { students: [], subjects: [] });
+      const marks: Record<string, MarkValue> = {};
+      c.subjects.forEach(sub => {
+        marks[sub.name] = Number(sub.marks) || 0;
+        if (!bucket.subjects.some(x => x.name === sub.name)) {
+          bucket.subjects.push({ name: sub.name, max: Number(sub.max) || 100 });
+        }
+      });
+      bucket.students.push({ id: String(c.studentId), name: c.name, section: c.section ?? 'A', marks });
+    });
+    return { exam, byClass };
+  });
+  const classes = Array.from(new Set(results.flatMap(r => Object.keys(r.byClass)))).sort();
+  return { results, classes, students, q, studentsQ };
+}
+
+// Weight of an exam in the annual result: the exam type whose name it contains
+// (e.g. "Mid-term 2026" -> Mid-term), otherwise an equal share.
+export function examWeight(examName: string, types: ExamType[]) {
+  const n = examName.toLowerCase();
+  return types.find(t => n.includes(t.name.toLowerCase()))?.weight ?? 0;
+}

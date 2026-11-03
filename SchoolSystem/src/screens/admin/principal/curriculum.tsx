@@ -5,13 +5,75 @@ import { BookOpen, ChartColumn, ClipboardCheck, ListChecks } from 'lucide-react-
 import { Badge, Button, Card, Field, ListRow, ProgressBar, Screen, toast, Toggle } from '../../../components/ui';
 import { adminStyles as a, BarChart, FormSheet, KV, ListScreen, PickerField, Table, useReasonPrompt } from '../../../components/admin';
 import { ScreenProps, useNav, useParam } from '../../../navigation';
-import { useShared } from '../../../store';
 import { CLASSES, logAudit } from '../../../data/admin';
-import { Chapter, CHAPTERS, LESSON_PLANS, LessonPlan } from '../../../data/admin-principal';
-import { localId, ReadOnlyBanner, useGuard } from '../owner/shared';
+import { Chapter, LessonPlan } from '../../../data/admin-principal';
+import { ModuleRow, field } from '../../../api/webA';
+import { localId, ReadOnlyBanner, useGuard, useModuleList } from '../owner/shared';
 
-export const useChapters = () => useShared<Chapter[]>('admin.chapters', CHAPTERS);
-export const usePlans = () => useShared<LessonPlan[]>('admin.lessonPlans', LESSON_PLANS);
+// Chapters and lesson plans live in the "curriculum" module that the teacher
+// app also writes (status "done" ticks a chapter).
+type CurItem = (Chapter & { kind: 'chapter' }) | (LessonPlan & { kind: 'plan' });
+
+const fromRow = (r: ModuleRow): CurItem => {
+  const status = field(r, 'status');
+  if (field(r, 'kind') === 'plan' || r.objectives !== undefined) {
+    const st = status.toLowerCase();
+    return {
+      kind: 'plan',
+      id: String(r.id),
+      teacher: field(r, 'teacher') || 'Teacher',
+      cls: field(r, 'cls', 'className'),
+      week: field(r, 'week', 'title'),
+      objectives: field(r, 'objectives'),
+      activities: field(r, 'activities'),
+      status: st === 'approved' ? 'Approved' : st === 'returned' ? 'Returned' : 'Pending',
+      comment: field(r, 'comment') || undefined,
+    };
+  }
+  return {
+    kind: 'chapter',
+    id: String(r.id),
+    cls: field(r, 'cls', 'className') || '—',
+    subject: field(r, 'subject') || '—',
+    term: field(r, 'term') || '—',
+    title: field(r, 'title', 'chapter'),
+    done: status === 'done' || r.done === true,
+    teacher: field(r, 'teacher'),
+  };
+};
+
+const toPayload = (x: CurItem): Record<string, unknown> =>
+  x.kind === 'plan'
+    ? { ...x, title: x.week, status: x.status.toLowerCase() }
+    : { ...x, status: x.done ? 'done' : 'planned' };
+
+function useCurriculum() {
+  return useModuleList<CurItem>('curriculum', fromRow, toPayload);
+}
+
+export function useChapters() {
+  const [all, setAll, q] = useCurriculum();
+  const list = all.filter((x): x is Chapter & { kind: 'chapter' } => x.kind === 'chapter');
+  const set = (next: Chapter[] | ((p: Chapter[]) => Chapter[])) =>
+    setAll(cur => {
+      const mine = cur.filter(x => x.kind === 'chapter') as Chapter[];
+      const out = typeof next === 'function' ? next(mine) : next;
+      return [...cur.filter(x => x.kind !== 'chapter'), ...out.map(c => ({ ...c, kind: 'chapter' as const }))];
+    });
+  return [list as Chapter[], set, q] as const;
+}
+
+export function usePlans() {
+  const [all, setAll, q] = useCurriculum();
+  const list = all.filter(x => x.kind === 'plan') as LessonPlan[];
+  const set = (next: LessonPlan[] | ((p: LessonPlan[]) => LessonPlan[])) =>
+    setAll(cur => {
+      const mine = cur.filter(x => x.kind === 'plan') as LessonPlan[];
+      const out = typeof next === 'function' ? next(mine) : next;
+      return [...cur.filter(x => x.kind !== 'plan'), ...out.map(p => ({ ...p, kind: 'plan' as const }))];
+    });
+  return [list, set, q] as const;
+}
 
 const pct = (list: Chapter[]) => (list.length ? Math.round((list.filter(c => c.done).length / list.length) * 100) : 0);
 
@@ -114,10 +176,11 @@ export function AdminCurrPlans(_: ScreenProps) {
 
 export function AdminCurrPlanDetail(_: ScreenProps) {
   const [list, setList] = usePlans();
-  const id = useParam('id', list[0].id);
-  const p = list.find(x => x.id === id) ?? list[0];
+  const id = String(useParam('id', ''));
+  const found = list.find(x => x.id === id) ?? list[0];
   const { guard } = useGuard();
   const [prompt, ask] = useReasonPrompt();
+  const p: LessonPlan = found ?? { id: '', teacher: '', cls: 'Lesson plan', week: '', objectives: '', activities: '', status: 'Approved' };
   const approve = guard(() => {
     setList(l => l.map(x => (x.id === p.id ? { ...x, status: 'Approved', comment: undefined } : x)));
     logAudit('Lesson plan', `Approved ${p.teacher} ${p.cls} ${p.week}`);

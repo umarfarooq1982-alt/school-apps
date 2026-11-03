@@ -1,14 +1,13 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
-  ArrowLeftRight,
   Bell,
-  CalendarDays,
+  Calendar,
   Check,
-  Clock,
+  ChevronLeft,
+  ChevronRight,
   Download,
   GraduationCap,
-  Heart,
   Layers,
   MessageCircle,
   Paperclip,
@@ -20,7 +19,6 @@ import {
   Users,
 } from 'lucide-react-native';
 import {
-  Amount,
   Badge,
   Button,
   Card,
@@ -29,10 +27,10 @@ import {
   formatRs,
   HeroCard,
   HStack,
+  IconButton,
   IconType,
   InfoBanner,
   ListRow,
-  Muted,
   ProgressBar,
   Screen,
   Segmented,
@@ -40,365 +38,447 @@ import {
   toast,
   Toggle,
 } from '../../components/ui';
+import { Empty, NoApiBanner, QueryView } from '../../components/states';
 import { colors } from '../../theme';
 import { useNav } from '../../navigation';
 import { useI18n } from '../../i18n';
+import { useApi, useMutation } from '../../api/hooks';
+import { LeaveDto, RecordDto, teacherApi } from '../../api/mobile';
+import { REPORTS } from '../../data/teacher';
 import {
-  CHAPTERS,
-  LEAVE_BALANCE,
-  LeaveType,
-  MY_ATTENDANCE,
-  REPORTS,
-  SALARY,
-  STUDENTS_5A,
-  T_NOTICES,
-} from '../../data/teacher';
-import { newId, useChapters, useLessonPlans } from './state';
+  addDays,
+  cap,
+  ClassChips,
+  dayLabel,
+  daysBetween,
+  isoDate,
+  leaveTone,
+  monthLabel,
+  useMyClasses,
+} from './common';
 
-// T19
+function useCurriculum() {
+  return useApi('teacher.curriculum', teacherApi.curriculum);
+}
+
+const isPlan = (r: RecordDto) => r.kind === 'lesson-plan' || (!r.kind && /week/i.test(r.title));
+const isChapter = (r: RecordDto) => r.kind === 'chapter' || (!isPlan(r) && r.kind !== 'lesson-plan');
+
+// T19: weekly lesson plan for coordinator review.
 export function TeacherLessonPlan() {
-  const [plans, setPlans] = useLessonPlans();
-  const [objectives, setObjectives] = useState(
-    'Read and understand lesson 8. Use 10 new words in sentences. Past tense practice.',
-  );
-  const [activities, setActivities] = useState(
-    'Group reading, word wall, worksheet 8A.',
-  );
+  const { classes, current, setPicked } = useMyClasses();
+  const q = useCurriculum();
+  const [objectives, setObjectives] = useState('');
+  const [activities, setActivities] = useState('');
   const [assessment, setAssessment] = useState('');
-  const sent = plans.some(p => p.week === 'Week of 26 Oct');
-  const send = () => {
-    if (!objectives.trim() || !activities.trim() || !assessment.trim()) {
-      toast('Fill objectives, activities and assessment');
+  const save = useMutation(teacherApi.saveCurriculum);
+  const monday = (() => {
+    const d = new Date();
+    const back = (d.getDay() + 6) % 7;
+    return addDays(isoDate(d), -back + 7);
+  })();
+  const plans = (q.data || []).filter(isPlan);
+
+  const send = async () => {
+    if (objectives.trim().length < 5) {
+      toast('Write the learning objectives');
       return;
     }
-    if (sent) {
-      toast('This week is already sent for review');
-      return;
+    const res = await save.run({
+      title: `Week of ${dayLabel(monday)}${current ? ` · ${current.label}` : ''}`,
+      status: 'submitted',
+      kind: 'lesson-plan',
+      week: monday,
+      classId: current?.classId,
+      section: current?.section,
+      objectives: objectives.trim(),
+      activities: activities.trim(),
+      assessment: assessment.trim(),
+    });
+    if (res) {
+      toast('Sent for review');
+      setObjectives('');
+      setActivities('');
+      setAssessment('');
+      q.refresh();
     }
-    setPlans(p => [
-      {
-        id: newId('lp'),
-        week: 'Week of 26 Oct',
-        note: 'Waiting for coordinator review',
-        status: 'Pending',
-      },
-      ...p,
-    ]);
-    toast('Lesson plan sent for review');
   };
+
   return (
-    <Screen title="Lesson plan" subtitle="Week of 26 Oct · 5-A English">
+    <Screen
+      title="Lesson plan"
+      subtitle={`Week of ${dayLabel(monday)}`}
+      refreshing={q.refreshing}
+      onRefresh={q.refresh}
+      footer={<Button label="Send for review" onPress={send} loading={save.busy} />}
+    >
+      <ClassChips classes={classes} value={current?.key} onChange={setPicked} />
       <Field label="Learning objectives" value={objectives} onChangeText={setObjectives} multiline />
       <Field label="Activities and resources" value={activities} onChangeText={setActivities} multiline />
-      <Field label="Assessment" value={assessment} onChangeText={setAssessment} placeholder="Spelling test Friday" />
-      <Button label={sent ? 'Sent for review' : 'Send for review'} onPress={send} disabled={sent} />
-      <Card>
-        {plans.map((p, i) => (
-          <ListRow
-            key={p.id}
-            icon={p.status === 'Returned' ? Pencil : p.status === 'Approved' ? Check : Clock}
-            title={p.week}
-            subtitle={p.note}
-            right={
-              <Badge
-                label={p.status}
-                tone={p.status === 'Approved' ? 'success' : p.status === 'Returned' ? 'danger' : 'warn'}
-              />
-            }
-            last={i === plans.length - 1}
-          />
-        ))}
-      </Card>
+      <Field label="Assessment" value={assessment} onChangeText={setAssessment} />
+      <QueryView q={q}>
+        {() => (
+          <Card title="Earlier plans">
+            {plans.length === 0 ? (
+              <Empty text="No lesson plans sent yet." />
+            ) : (
+              plans.map((p, i) => (
+                <ListRow
+                  key={p.id}
+                  icon={p.status === 'approved' ? Check : Pencil}
+                  title={p.title}
+                  subtitle={p.comment ? `“${String(p.comment)}”` : dayLabel(p.recordDate)}
+                  right={<Badge label={cap(p.status)} tone={p.status === 'approved' ? 'success' : p.status === 'returned' ? 'danger' : 'warn'} />}
+                  last={i === plans.length - 1}
+                />
+              ))
+            )}
+          </Card>
+        )}
+      </QueryView>
     </Screen>
   );
 }
 
-// T20
+// T20: tick chapters done; coverage %.
 export function TeacherSyllabus() {
-  const [done, setDone] = useChapters();
-  const count = CHAPTERS.filter(c => done[c.id]).length;
-  const pct = Math.round((count / CHAPTERS.length) * 100);
+  const q = useCurriculum();
+  const [chapter, setChapter] = useState('');
+  const save = useMutation(teacherApi.saveCurriculum);
+  const chapters = (q.data || []).filter(isChapter);
+  const done = chapters.filter(c => c.status === 'done').length;
+  const pct = chapters.length ? Math.round((done / chapters.length) * 100) : 0;
+
+  const toggle = async (c: RecordDto, on: boolean) => {
+    const { id, title, ...rest }: Record<string, unknown> & { id: number; title: string } = c;
+    delete rest.uuid;
+    delete rest.recordDate;
+    const res = await save.run({ ...rest, title, kind: 'chapter', status: on ? 'done' : 'planned', doneOn: on ? isoDate() : null }, id);
+    if (res) {
+      q.setData(list => (list || []).map(x => (x.id === id ? { ...x, status: on ? 'done' : 'planned' } : x)));
+    }
+  };
+
+  const add = async () => {
+    if (chapter.trim().length < 2) {
+      toast('Enter a chapter name');
+      return;
+    }
+    const res = await save.run({ title: chapter.trim(), kind: 'chapter', status: 'planned' });
+    if (res) {
+      setChapter('');
+      q.refresh();
+    }
+  };
+
   return (
-    <Screen title="Syllabus" subtitle="5-A · English">
-      <Card>
-        <View style={s.between}>
-          <Text style={s.h}>Coverage</Text>
-          <Text style={s.h}>{pct}%</Text>
-        </View>
-        <View style={s.gap8}>
-          <ProgressBar value={pct} />
-        </View>
-        <Muted>
-          {count} of {CHAPTERS.length} chapters
-        </Muted>
-      </Card>
-      <Card>
-        {CHAPTERS.map((c, i) => (
-          <ListRow
-            key={c.id}
-            title={c.title}
-            subtitle={done[c.id] ? `${c.term} · done ${done[c.id]}` : c.term}
-            right={
-              <Toggle
-                value={!!done[c.id]}
-                onChange={v =>
-                  setDone(p => ({ ...p, [c.id]: v ? '22 Oct' : undefined }))
-                }
-              />
-            }
-            last={i === CHAPTERS.length - 1}
-          />
-        ))}
-      </Card>
+    <Screen title="Syllabus" refreshing={q.refreshing} onRefresh={q.refresh}>
+      <QueryView q={q}>
+        {() => (
+          <>
+            <Card>
+              <View style={s.between}>
+                <Text style={s.h}>Coverage</Text>
+                <Text style={s.h}>{pct}%</Text>
+              </View>
+              <View style={s.gap8}>
+                <ProgressBar value={pct} />
+              </View>
+              <Text style={s.sub}>
+                {done} of {chapters.length} chapters
+              </Text>
+            </Card>
+            <Card>
+              {chapters.length === 0 ? (
+                <Empty text="No chapters yet. Add the syllabus chapters below." />
+              ) : (
+                chapters.map((c, i) => (
+                  <ListRow
+                    key={c.id}
+                    title={c.title}
+                    subtitle={c.status === 'done' ? `Done ${dayLabel(String(c.doneOn || c.recordDate))}` : 'Not done'}
+                    right={<Toggle value={c.status === 'done'} onChange={v => toggle(c, v)} />}
+                    last={i === chapters.length - 1}
+                  />
+                ))
+              )}
+            </Card>
+            <Field label="Add chapter" value={chapter} onChangeText={setChapter} placeholder="8. Quaid-e-Azam" />
+            <Button label="Add" variant="outline" icon={Plus} onPress={add} loading={save.busy} />
+          </>
+        )}
+      </QueryView>
     </Screen>
   );
 }
 
-const STATUS_TONE: Record<string, 'success' | 'warn' | 'info'> = {
-  Present: 'success',
-  Late: 'warn',
-  'Short leave': 'info',
+const thisMonth = () => isoDate().slice(0, 7);
+const shiftMonth = (ym: string, n: number) => {
+  const [y, m] = ym.split('-').map(Number);
+  const d = new Date(y, m - 1 + n, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 };
 
-// T21
+type Policy = { name: string; quota: number };
+
+function policiesOf(raw: Array<Record<string, unknown>>): Policy[] {
+  return raw.map(p => ({
+    name: String(p.name || p.leave_type || p.type || 'Leave'),
+    quota: Number(p.quota ?? p.yearly_quota ?? p.days ?? p.days_per_year ?? 0),
+  }));
+}
+
+function usedDays(leaves: LeaveDto[], type: string) {
+  return leaves
+    .filter(l => l.status === 'approved' && (l.leave_type || '').toLowerCase() === type.toLowerCase())
+    .reduce((n, l) => n + Number(l.days || 0), 0);
+}
+
+// T21: own time in/out and leave balance.
 export function TeacherMyAttendance() {
   const nav = useNav();
-  const a = MY_ATTENDANCE;
-  const icons: Record<LeaveType, IconType> = {
-    Casual: Clock,
-    Sick: Heart,
-    Annual: CalendarDays,
-    Unpaid: Receipt,
-  };
+  const [month, setMonth] = useState(thisMonth());
+  const q = useApi(`teacher.myAtt.${month}`, () => teacherApi.myAttendance(month));
   return (
-    <Screen title="My attendance" subtitle={a.month}>
-      <HStack gap={8}>
-        <StatTile value={a.present} label="Present" />
-        <StatTile value={a.late} label="Late" />
-        <StatTile value={a.absent} label="Absent" />
-        <StatTile value={a.shortLeave} label="Short leave" />
-      </HStack>
-      <Card title="This week">
-        {a.week.map((w, i) => (
-          <ListRow
-            key={w.day}
-            title={w.day}
-            subtitle={w.sub}
-            right={<Badge label={w.status} tone={STATUS_TONE[w.status]} />}
-            last={i === a.week.length - 1}
-          />
-        ))}
-      </Card>
-      <Card title="Leave balance">
-        {(['Casual', 'Sick', 'Annual'] as LeaveType[]).map((k, i) => {
-          const b = LEAVE_BALANCE[k];
+    <Screen title="My attendance" subtitle={monthLabel(month)} refreshing={q.refreshing} onRefresh={q.refresh}
+      right={
+        <View style={s.row}>
+          <IconButton icon={ChevronLeft} onPress={() => setMonth(m => shiftMonth(m, -1))} />
+          <IconButton icon={ChevronRight} onPress={() => setMonth(m => (m < thisMonth() ? shiftMonth(m, 1) : m))} />
+        </View>
+      }
+    >
+      <QueryView q={q}>
+        {d => {
+          const by = (st: string) => d.days.filter(x => (x.status || '').toLowerCase().startsWith(st)).length;
+          const policies = policiesOf(d.policies);
           return (
-            <ListRow
-              key={k}
-              icon={icons[k]}
-              title={k}
-              subtitle={`${b.left} of ${b.total} left${b.note ? ` (${b.note})` : ''}`}
-              last={i === 2}
-            />
+            <>
+              <HStack gap={8}>
+                <StatTile value={by('p')} label="Present" />
+                <StatTile value={by('l')} label="Late" />
+                <StatTile value={by('a')} label="Absent" />
+                <StatTile value={by('s') + by('h')} label="Short leave" />
+              </HStack>
+              <Card title="Days">
+                {d.days.length === 0 ? (
+                  <Empty text="No attendance recorded this month." />
+                ) : (
+                  d.days.map((x, i) => (
+                    <ListRow
+                      key={x.date}
+                      title={dayLabel(x.date)}
+                      subtitle={`In ${x.timeIn || '—'} · Out ${x.timeOut || '—'}`}
+                      right={<Badge label={cap(x.status || '—')} tone={/^p/i.test(x.status) ? 'success' : /^a/i.test(x.status) ? 'danger' : 'warn'} />}
+                      last={i === d.days.length - 1}
+                    />
+                  ))
+                )}
+              </Card>
+              <Card title="Leave balance">
+                {policies.length === 0 ? (
+                  <Empty text="The school has not set leave policies yet." />
+                ) : (
+                  policies.map((p, i) => (
+                    <ListRow
+                      key={p.name}
+                      icon={Calendar}
+                      title={p.name}
+                      subtitle={`${Math.max(0, p.quota - usedDays(d.leaves, p.name))} of ${p.quota} left`}
+                      last={i === policies.length - 1}
+                    />
+                  ))
+                )}
+              </Card>
+              <Card title="My leave requests">
+                {d.leaves.length === 0 ? (
+                  <Empty text="No leave requests." />
+                ) : (
+                  d.leaves.map((l, i) => (
+                    <ListRow
+                      key={l.id}
+                      title={`${l.leave_type || 'Leave'} · ${Number(l.days)} day(s)`}
+                      subtitle={`${dayLabel(l.from_date)} – ${dayLabel(l.to_date)}`}
+                      right={<Badge label={cap(l.status)} tone={leaveTone(l.status)} />}
+                      last={i === d.leaves.length - 1}
+                    />
+                  ))
+                )}
+              </Card>
+              <Button label="Apply for leave" icon={Plus} onPress={() => nav.push('TeacherApplyLeave')} />
+            </>
           );
-        })}
-      </Card>
-      <Button label="Apply for leave" icon={Plus} onPress={() => nav.push('TeacherApplyLeave')} />
+        }}
+      </QueryView>
     </Screen>
   );
 }
 
-const DAY_OPTIONS = ['Mon 2 Nov', 'Tue 3 Nov', 'Wed 4 Nov', 'Thu 5 Nov', 'Fri 6 Nov'];
+const LEAVE_TYPES = ['Casual', 'Sick', 'Annual', 'Unpaid'];
 
-// T22
+// T22: leave with approval chain and balance check.
 export function TeacherApplyLeave() {
   const nav = useNav();
-  const [type, setType] = useState<LeaveType>('Casual');
-  const [from, setFrom] = useState(0);
-  const [to, setTo] = useState(1);
+  const q = useApi(`teacher.myAtt.${thisMonth()}`, () => teacherApi.myAttendance(thisMonth()));
+  const [type, setType] = useState('Casual');
+  const days = Array.from({ length: 30 }, (_, i) => addDays(isoDate(), i));
+  const [from, setFrom] = useState(days[1]);
+  const [to, setTo] = useState(days[1]);
   const [reason, setReason] = useState('');
-  const days = to - from + 1;
-  const b = LEAVE_BALANCE[type];
-  const over = type !== 'Unpaid' && days > b.left;
+  const apply = useMutation(teacherApi.applyLeave);
+  const n = to >= from ? daysBetween(from, to) : 0;
+  const policy = policiesOf(q.data?.policies || []).find(p => p.name.toLowerCase() === type.toLowerCase());
+  const left = policy ? Math.max(0, policy.quota - usedDays(q.data?.leaves || [], type)) : undefined;
+  const over = type !== 'Unpaid' && left !== undefined && n > left;
   const info =
-    days < 1
-      ? 'The To date must be on or after the From date.'
-      : type === 'Unpaid'
-      ? `${days} day(s) unpaid. Goes to the Principal. Your periods appear in Substitutions once approved.`
+    type === 'Unpaid'
+      ? `${n} day(s) unpaid. Unpaid leave is deducted in payroll.`
+      : left === undefined
+      ? `${n} day(s) from ${type}. Goes to the Principal for approval.`
       : over
-      ? `Only ${b.left} ${type} days left. Choose fewer days or Unpaid.`
-      : `${days} day(s) from ${type} (${b.left} left). Goes to the Principal. Your periods appear in Substitutions once approved.`;
-  const send = () => {
-    if (days < 1 || over) {
-      toast(info);
-    } else if (!reason.trim()) {
+      ? `Only ${left} ${type} day(s) left. Choose fewer days or Unpaid.`
+      : `${n} day(s) from ${type} (${left} left). Goes to the Principal. Your periods appear in Substitutions once approved.`;
+
+  const send = async () => {
+    if (!n) {
+      toast('The "to" date must be on or after the "from" date');
+      return;
+    }
+    if (over) {
+      toast('Leave beyond your balance is allowed only as Unpaid');
+      return;
+    }
+    if (reason.trim().length < 3) {
       toast('Write a reason');
-    } else {
-      toast('Leave request sent to the Principal');
+      return;
+    }
+    const res = await apply.run({ from, to, reason: reason.trim(), type, days: n });
+    if (res) {
+      toast('Leave request sent');
       nav.pop();
     }
   };
+
+  const pick = (label: string) => days.find(d => dayLabel(d) === label) || days[0];
   return (
-    <Screen title="Apply for leave" footer={<Button label="Send request" onPress={send} />}>
-      <Segmented
-        options={['Casual', 'Sick', 'Annual', 'Unpaid']}
-        value={type}
-        onChange={v => setType(v as LeaveType)}
-      />
-      <HStack>
-        <View style={s.flex}>
-          <Field
-            label="From"
-            icon={CalendarDays}
-            value={DAY_OPTIONS[from]}
-            onPress={() => setFrom(i => (i + 1) % DAY_OPTIONS.length)}
-          />
-        </View>
-        <View style={s.flex}>
-          <Field
-            label="To"
-            icon={CalendarDays}
-            value={DAY_OPTIONS[to]}
-            onPress={() => setTo(i => (i + 1) % DAY_OPTIONS.length)}
-          />
-        </View>
-      </HStack>
-      <Muted>Tap a date to move it to the next day.</Muted>
-      <Field label="Reason" value={reason} onChangeText={setReason} multiline placeholder="Sister's wedding in Sialkot." />
-      <InfoBanner tone={days < 1 || over ? 'danger' : 'info'} icon={Users} text={info} />
+    <Screen title="Apply for leave" footer={<Button label="Send request" onPress={send} loading={apply.busy} />}>
+      <Segmented options={LEAVE_TYPES} value={type} onChange={setType} />
+      <Text style={s.label}>From</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+        <Chips style={s.noWrap} options={days.map(dayLabel)} value={dayLabel(from)} onChange={l => setFrom(pick(l))} />
+      </ScrollView>
+      <Text style={s.label}>To</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+        <Chips style={s.noWrap} options={days.map(dayLabel)} value={dayLabel(to)} onChange={l => setTo(pick(l))} />
+      </ScrollView>
+      <Field label="Reason" value={reason} onChangeText={setReason} multiline />
+      <InfoBanner tone={over ? 'danger' : 'info'} icon={over ? TriangleAlert : Users} text={info} />
     </Screen>
   );
 }
 
-// T23
+// T23: monthly salary slips.
 export function TeacherSalary() {
+  const q = useApi('teacher.salary', teacherApi.salary);
   return (
-    <Screen title="Salary">
-      <HeroCard label={`${SALARY.month} net salary`} value={formatRs(SALARY.net)} />
-      <Card title="Breakdown">
-        {SALARY.lines.map((l, i) => (
-          <ListRow
-            key={l.title}
-            title={l.title}
-            subtitle={l.sub}
-            right={<Amount value={l.amount} tone={l.amount < 0 ? 'danger' : undefined} />}
-            last={i === SALARY.lines.length - 1}
-          />
-        ))}
-      </Card>
-      <Card title="Earlier slips">
-        {SALARY.earlier.map((e, i) => (
-          <ListRow
-            key={e.month}
-            icon={Receipt}
-            title={e.month}
-            subtitle={formatRs(e.amount)}
-            right={<Download size={18} color={colors.text} />}
-            onPress={() => toast(`${e.month} slip downloaded (demo)`)}
-            last={i === SALARY.earlier.length - 1}
-          />
-        ))}
-      </Card>
-      <Button
-        label="Download September slip"
-        variant="outline"
-        icon={Download}
-        onPress={() => toast('September slip downloaded (demo)')}
-      />
+    <Screen title="Salary" refreshing={q.refreshing} onRefresh={q.refresh}>
+      <QueryView q={q} isEmpty={d => d.length === 0} emptyText="No salary slips yet.">
+        {d => {
+          const latest = d[0];
+          return (
+            <>
+              <HeroCard label={`${monthLabel(latest.month)} net salary`} value={formatRs(latest.net)} />
+              <Card title="Breakdown">
+                <ListRow title="Basic salary" right={<Text style={s.amount}>{formatRs(latest.basic)}</Text>} />
+                <ListRow title="Allowances" right={<Text style={s.amount}>{formatRs(latest.allowances)}</Text>} />
+                <ListRow title="Deductions" right={<Text style={[s.amount, s.red]}>{formatRs(-latest.deductions)}</Text>} />
+                <ListRow title="Status" right={<Badge label={cap(latest.status)} tone={latest.status === 'paid' ? 'success' : 'warn'} />} last />
+              </Card>
+              <Card title="Earlier slips">
+                {d.slice(1).length === 0 ? (
+                  <Empty text="No earlier slips." />
+                ) : (
+                  d.slice(1).map((x, i, arr) => (
+                    <ListRow
+                      key={x.id}
+                      icon={Receipt}
+                      title={monthLabel(x.month)}
+                      subtitle={formatRs(x.net)}
+                      right={<IconButton icon={Download} onPress={() => toast('Slip PDF is not available from the server yet')} />}
+                      last={i === arr.length - 1}
+                    />
+                  ))
+                )}
+              </Card>
+            </>
+          );
+        }}
+      </QueryView>
     </Screen>
   );
 }
 
-// T24
+// T24: notice to parents of own class.
 export function TeacherMessageParents() {
   const nav = useNav();
   const { t } = useI18n();
-  const [to, setTo] = useState('Parents of 5-A');
-  const [student, setStudent] = useState(STUDENTS_5A[0].name);
+  const { classes, current, setPicked } = useMyClasses();
   const [title, setTitle] = useState('');
   const [msg, setMsg] = useState('');
-  const [inApp, setInApp] = useState(true);
-  const [sms, setSms] = useState(false);
-  const [wa, setWa] = useState(false);
-  const count = to === 'One parent' ? 1 : STUDENTS_5A.length;
-  const send = () => {
+  const [sms, setSms] = useState(true);
+  const send = useMutation(teacherApi.messageParents);
+  const submit = async () => {
+    if (!current) {
+      toast('No class is assigned to you yet');
+      return;
+    }
     if (!title.trim() || !msg.trim()) {
       toast('Write a title and a message');
-    } else if (!inApp && !sms && !wa) {
-      toast('Choose at least one channel');
-    } else {
-      toast(`Sent to ${count} parent${count > 1 ? 's' : ''}`);
+      return;
+    }
+    const res = await send.run({ classId: current.classId, section: current.section, title: title.trim(), body: msg.trim() });
+    if (res) {
+      toast(`Sent to parents of ${current.label}${res.queued ? ` · ${res.queued} SMS/WhatsApp queued` : ''}`);
       nav.pop();
     }
   };
   return (
-    <Screen title="Message parents" footer={<Button label="Send" icon={MessageCircle} onPress={send} />}>
-      <Chips options={['Parents of 5-A', 'One parent']} value={to} onChange={setTo} />
-      {to === 'One parent' ? (
-        <Card title="Student">
-          <Chips
-            options={STUDENTS_5A.slice(0, 8).map(x => x.name)}
-            value={student}
-            onChange={setStudent}
-          />
-        </Card>
-      ) : null}
+    <Screen title="Message parents" footer={<Button label="Send" icon={MessageCircle} onPress={submit} loading={send.busy} />}>
+      <ClassChips classes={classes} value={current?.key} onChange={setPicked} />
+      <Text style={s.sub}>{t('Parents of')} {current?.label}</Text>
       <Field label="Title" value={title} onChangeText={setTitle} placeholder="Art file by Friday" />
-      <Field
-        label="Message"
-        value={msg}
-        onChangeText={setMsg}
-        multiline
-        placeholder="Please send your child's art file and colours on Friday."
-      />
+      <Field label="Message" value={msg} onChangeText={setMsg} multiline placeholder="Please send your child's art file on Friday." />
       <Card>
-        <ListRow
-          icon={Bell}
-          title={t('In-app notification')}
-          subtitle={`${count} parent${count > 1 ? 's' : ''}`}
-          right={<Toggle value={inApp} onChange={setInApp} />}
-        />
-        <ListRow
-          icon={MessageCircle}
-          title="SMS"
-          subtitle={t('Uses school SMS credit')}
-          right={<Toggle value={sms} onChange={setSms} />}
-        />
-        <ListRow
-          icon={Phone}
-          title="WhatsApp"
-          right={<Toggle value={wa} onChange={setWa} />}
-          last
-        />
+        <ListRow icon={Bell} title={t('In-app notice')} subtitle="Always sent" right={<Badge label="On" tone="success" />} />
+        <ListRow icon={MessageCircle} title="SMS / WhatsApp" subtitle={t('Uses school SMS credit')} right={<Toggle value={sms} onChange={setSms} />} />
+        <ListRow icon={Phone} title="One parent only" subtitle="Not available yet" last />
       </Card>
+      <NoApiBanner what="Choosing channels and messaging one parent" />
     </Screen>
   );
 }
 
-const NOTICE_ICON: Record<string, IconType> = {
-  sub: ArrowLeftRight,
-  exam: GraduationCap,
-  check: Check,
-  salary: Receipt,
-  meeting: Users,
-};
-
-// T25
+// T25: school notices for staff.
 export function TeacherNotices() {
+  const q = useApi('teacher.notices', teacherApi.notices);
   return (
-    <Screen title="Notices">
-      <Card>
-        {T_NOTICES.map((n, i) => (
-          <ListRow
-            key={n.id}
-            icon={NOTICE_ICON[n.icon]}
-            title={n.title}
-            subtitle={n.text}
-            right={<Text style={s.when}>{n.when}</Text>}
-            last={i === T_NOTICES.length - 1}
-          />
-        ))}
-      </Card>
+    <Screen title="Notices" refreshing={q.refreshing} onRefresh={q.refresh}>
+      <QueryView q={q} isEmpty={d => d.length === 0} emptyText="No notices.">
+        {d => (
+          <Card>
+            {d.map((n, i) => (
+              <ListRow
+                key={n.id}
+                icon={Bell}
+                title={n.title}
+                subtitle={n.body}
+                right={<Text style={s.when}>{dayLabel(n.at)}</Text>}
+                last={i === d.length - 1}
+              />
+            ))}
+          </Card>
+        )}
+      </QueryView>
     </Screen>
   );
 }
@@ -412,10 +492,35 @@ const REPORT_ICON: Record<string, IconType> = {
   layers: Layers,
 };
 
-// T26
+// T26: class reports. Only class strength comes from the server.
 export function TeacherReports() {
+  const q = useApi('teacher.reports.strength', () => teacherApi.reports('strength'));
+  const { classes } = useMyClasses();
   return (
-    <Screen title="Reports">
+    <Screen title="Reports" refreshing={q.refreshing} onRefresh={q.refresh}>
+      <QueryView q={q}>
+        {d => (
+          <Card title="Class strength">
+            {d.length === 0 ? (
+              <Empty text="No classes." />
+            ) : (
+              d.map((r, i) => {
+                const label = classes.find(c => c.classId === Number(r.classId) && c.section === r.section)?.label || `Class ${r.classId}-${r.section}`;
+                return (
+                  <ListRow
+                    key={`${r.classId}-${r.section}`}
+                    icon={Users}
+                    title={label}
+                    right={<Badge label={`${r.students} students`} tone="info" />}
+                    last={i === d.length - 1}
+                  />
+                );
+              })
+            )}
+          </Card>
+        )}
+      </QueryView>
+      <NoApiBanner what="Attendance, homework, marks, result and syllabus reports" />
       <Card>
         {REPORTS.map((r, i) => (
           <ListRow
@@ -424,7 +529,7 @@ export function TeacherReports() {
             title={r.title}
             subtitle={r.sub}
             right={<Badge label="PDF · Excel" tone="neutral" />}
-            onPress={() => toast(`${r.title} report downloaded (demo)`)}
+            onPress={() => toast(`${r.title}: not available from the server yet`)}
             last={i === REPORTS.length - 1}
           />
         ))}
@@ -435,9 +540,14 @@ export function TeacherReports() {
 }
 
 const s = StyleSheet.create({
-  flex: { flex: 1 },
+  row: { flexDirection: 'row', gap: 6 },
+  noWrap: { flexWrap: 'nowrap' },
   between: { flexDirection: 'row', justifyContent: 'space-between' },
   h: { fontSize: 15, fontWeight: '800', color: colors.text },
   gap8: { marginVertical: 8 },
+  sub: { fontSize: 12.5, color: colors.textMuted },
+  label: { fontSize: 12.5, fontWeight: '800', color: colors.text },
   when: { fontSize: 11.5, fontWeight: '700', color: colors.textMuted },
+  amount: { fontSize: 14, fontWeight: '800', color: colors.text },
+  red: { color: colors.danger },
 });

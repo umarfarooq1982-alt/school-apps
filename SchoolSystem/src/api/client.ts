@@ -1,7 +1,7 @@
 // HTTP client for the school API. Every response is the envelope
 // { statusCode, success, message, data }; callers get `data` or an ApiError.
 import { API_BASE_URL, REQUEST_TIMEOUT_MS } from './config';
-import { getSession, isExpired } from './session';
+import { canRefresh, getSession, isExpired, saveSession, tokenExpiry } from './session';
 
 export class ApiError extends Error {
   status: number;
@@ -38,10 +38,53 @@ function buildUrl(path: string, query?: Options['query']) {
   return `${API_BASE_URL}${path}${qs ? `?${qs}` : ''}`;
 }
 
-export async function request<T>(method: string, path: string, opts: Options = {}): Promise<T> {
+// One refresh at a time; parallel requests wait for the same promise.
+let refreshing: Promise<boolean> | null = null;
+
+export function refreshSession(): Promise<boolean> {
+  const s = getSession();
+  if (!s || !canRefresh(s)) {
+    return Promise.resolve(false);
+  }
+  if (!refreshing) {
+    refreshing = (async () => {
+      try {
+        const res = await fetch(buildUrl('/api/mobile/auth/refresh'), {
+          method: 'POST',
+          headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken: s.refreshToken }),
+        });
+        const json = await res.json().catch(() => null);
+        const d = json?.data;
+        if (!res.ok || !json?.success || !d?.accessToken) {
+          return false;
+        }
+        const cur = getSession() || s;
+        await saveSession({
+          ...cur,
+          token: d.accessToken,
+          exp: tokenExpiry(d.accessToken),
+          refreshToken: d.refreshToken || cur.refreshToken,
+          refreshExp: d.refreshToken ? tokenExpiry(d.refreshToken) : cur.refreshExp,
+        });
+        return true;
+      } catch {
+        return false;
+      } finally {
+        refreshing = null;
+      }
+    })();
+  }
+  return refreshing;
+}
+
+export async function request<T>(method: string, path: string, opts: Options = {}, retried = false): Promise<T> {
   const headers: Record<string, string> = { Accept: 'application/json', ...opts.headers };
   const auth = opts.auth !== false;
   if (auth) {
+    if (isExpired(getSession())) {
+      await refreshSession();
+    }
     const s = getSession();
     if (!s || isExpired(s, 0)) {
       onUnauthorized?.();
@@ -95,6 +138,10 @@ export async function request<T>(method: string, path: string, opts: Options = {
   }
 
   if (res.status === 401 && auth) {
+    // The access token may have been revoked early: renew once and retry.
+    if (!retried && (await refreshSession())) {
+      return request<T>(method, path, opts, true);
+    }
     onUnauthorized?.();
     throw new ApiError(401, 'Your session has ended. Please sign in again.');
   }

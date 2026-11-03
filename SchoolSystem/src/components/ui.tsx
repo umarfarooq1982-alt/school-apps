@@ -80,6 +80,10 @@ export function Muted({ children, style, numberOfLines }: TxtProps) {
 // True when the screen is rendered inside a bottom tab bar.
 export const InTabsContext = createContext(false);
 
+// Optional notice shown at the top of a Screen's content (e.g. "sample data,
+// no API yet"), set by wrapping a screen in a provider.
+export const ScreenNoticeContext = createContext<React.ReactNode>(null);
+
 export function IconButton({
   icon: Icon,
   onPress,
@@ -153,6 +157,7 @@ export function Screen({
 }: ScreenProps) {
   const insets = useSafeAreaInsets();
   const inTabs = useContext(InTabsContext);
+  const notice = useContext(ScreenNoticeContext);
   const nav = useNav();
   const { t, isRTL } = useI18n();
   const bottomPad = inTabs ? 0 : insets.bottom;
@@ -205,10 +210,12 @@ export function Screen({
         ) : undefined
       }
     >
+      {notice}
       {children}
     </ScrollView>
   ) : (
     <View style={[styles.flex, styles.contentNoScroll, contentStyle]}>
+      {notice}
       {children}
     </View>
   );

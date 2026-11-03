@@ -33,6 +33,9 @@ import {
 import { ScreenProps, useNav } from '../../navigation';
 import { useSession, useShared } from '../../store';
 import { useI18n } from '../../i18n';
+import { NoApiBanner } from '../../components/states';
+import { useApi, useMutation } from '../../api/hooks';
+import { settingsApi } from '../../api/mobile';
 
 type Item = { label: string; icon: IconType; route: string };
 
@@ -113,12 +116,26 @@ export function ParentSettings(_: ScreenProps) {
   const nav = useNav();
   const { t, lang, setLang } = useI18n();
   const signOut = useSignOut();
+  const q = useApi('mobile-settings', settingsApi.get);
+  const save = useMutation(settingsApi.save, 'Saved');
+  const notifOn = q.data?.notifications ?? true;
   const [prefs, setPrefs] = useShared<Record<string, boolean>>(
     'parent.notifPrefs',
     { absent: true, fee: true, diary: true, results: true, notices: true },
   );
+  const setLanguage = async (l: 'en' | 'ur') => {
+    setLang(l);
+    if ((await save.run({ locale: l, notifications: notifOn })) !== undefined) {
+      q.setData(d => ({ ...(d ?? { notifications: true, rtl: false }), locale: l, rtl: l === 'ur' }));
+    }
+  };
+  const setNotif = async (v: boolean) => {
+    if ((await save.run({ locale: lang, notifications: v })) !== undefined) {
+      q.setData(d => ({ ...(d ?? { locale: lang, rtl: lang === 'ur' }), notifications: v }));
+    }
+  };
   return (
-    <Screen title="Settings">
+    <Screen title="Settings" refreshing={q.refreshing} onRefresh={q.refresh}>
       <Card>
         <ListRow
           icon={Globe}
@@ -129,7 +146,7 @@ export function ParentSettings(_: ScreenProps) {
               <Segmented
                 options={['EN', 'اردو']}
                 value={lang === 'en' ? 'EN' : 'اردو'}
-                onChange={v => setLang(v === 'EN' ? 'en' : 'ur')}
+                onChange={v => setLanguage(v === 'EN' ? 'en' : 'ur')}
               />
             </View>
           }
@@ -137,6 +154,11 @@ export function ParentSettings(_: ScreenProps) {
         />
       </Card>
       <Card title="Notifications">
+        <ListRow
+          icon={Bell}
+          title={t('All notifications')}
+          right={<Toggle value={notifOn} onChange={setNotif} />}
+        />
         {NOTIFS.map((n, i) => (
           <ListRow
             key={n.key}
@@ -144,7 +166,7 @@ export function ParentSettings(_: ScreenProps) {
             title={t(n.label)}
             right={
               <Toggle
-                value={prefs[n.key] ?? true}
+                value={notifOn && (prefs[n.key] ?? true)}
                 onChange={v => setPrefs(p => ({ ...p, [n.key]: v }))}
               />
             }
@@ -152,6 +174,7 @@ export function ParentSettings(_: ScreenProps) {
           />
         ))}
       </Card>
+      <NoApiBanner what={t('Separate alert types')} />
       <Card>
         <ListRow icon={Lock} title={t('Change password')} onPress={() => nav.push('ChangePassword')} />
         <ListRow icon={LogOut} title={t('Sign out')} onPress={signOut} last />

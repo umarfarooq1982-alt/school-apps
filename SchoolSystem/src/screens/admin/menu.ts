@@ -50,6 +50,26 @@ import type { IconType } from '../../components/ui';
 import type { StaffRole } from '../../data/admin';
 import { Perm, ROLE_DEFS, RoleDef } from '../../data/admin-owner';
 import { useShared } from '../../store';
+import { useApiSession } from '../../api/session';
+
+// Server permission (session.user.permissions) a panel needs. A user with a
+// custom permission list from Users & roles sees only the panels it allows.
+const PANEL_PERMS: Record<string, string[]> = {
+  owner: ['users.view', 'settings.edit'],
+  principal: ['approvals.decide', 'academic.view'],
+  frontdesk: ['admissions.view', 'students.view'],
+  accounts: ['fees.view'],
+  hr: ['staff.view'],
+  exam: ['academic.view', 'reports.view'],
+};
+
+function allowedByServer(panelKey: string, perms: string[] | undefined) {
+  const need = PANEL_PERMS[panelKey];
+  if (!need || !perms || !perms.length) {
+    return true;
+  }
+  return need.some(n => perms.includes(n) || perms.includes(`${n.split('.')[0]}.*`));
+}
 
 export type MenuItem = { route: string; title: string; sub: string; icon: IconType };
 export type Panel = {
@@ -234,16 +254,19 @@ export const useMatrix = () =>
 // The Owner always keeps full access so they cannot lock themselves out.
 export function useAccess(role: StaffRole) {
   const [matrix] = useMatrix();
+  const [session] = useApiSession();
+  const serverPerms = session?.user.permissions;
   return useMemo(() => {
     const perms = matrix[role];
-    const panels =
+    const base =
       role === 'owner' || !perms
         ? panelsFor(role)
         : PANELS.map(p => ({
             ...p,
             items: p.items.filter(i => perms[i.route]?.includes('View')),
           })).filter(p => p.items.length > 0);
+    const panels = role === 'owner' ? base : base.filter(p => allowedByServer(p.key, serverPerms));
     const routes = new Set(panels.flatMap(p => p.items.map(i => i.route)));
     return { panels, can: (route: string) => routes.has(route) };
-  }, [matrix, role]);
+  }, [matrix, role, serverPerms]);
 }

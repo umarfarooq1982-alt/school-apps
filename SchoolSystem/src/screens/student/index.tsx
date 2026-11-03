@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import {
+  Bell,
   BookOpen,
   Bus,
   Calendar,
@@ -9,7 +10,6 @@ import {
   Check,
   Clock,
   File,
-  FileText,
   Globe,
   GraduationCap,
   House,
@@ -17,57 +17,58 @@ import {
   Lock,
   LogOut,
   Paperclip,
-  Bell,
   Receipt,
   Send,
   TriangleAlert,
   User,
-  X,
 } from 'lucide-react-native';
 import {
+  Avatar,
   Badge,
   BellButton,
   Body,
   Button,
   Card,
   Field,
+  formatRs,
   HeroCard,
   HStack,
   IconButton,
+  InfoBanner,
   InfoTile,
   ListRow,
   Muted,
-  Placeholder,
   QRCode,
   Screen,
-  Toggle,
   toast,
-  Avatar,
-  InfoBanner,
-  formatRs,
+  Toggle,
 } from '../../components/ui';
+import { QueryView } from '../../components/states';
 import { TabShell, useTabs } from '../../components/Tabs';
 import { ScreenMap, useNav, useParam } from '../../navigation';
-import { useShared, useSession } from '../../store';
+import { useSession } from '../../store';
 import { useI18n } from '../../i18n';
-import { colors, radius } from '../../theme';
+import { colors } from '../../theme';
+import { familyApi } from '../../api/mobile';
+import { useMutation } from '../../api/hooks';
+import { useCurrentChild } from '../../data/useChild';
 import {
-  HOMEWORK,
-  LIBRARY,
-  STUDENT,
-  TODAY_PERIODS,
-} from '../../data/school';
-import {
+  cap,
+  fmtDate,
+  fmtDay,
   HomeworkScreen,
+  hwBucket,
+  MARK_LABEL,
+  monthLabel,
   ResultsScreen,
+  statusTone,
   TimetableScreen,
-  useChildFee,
+  todayIso,
+  useFamily,
+  useFees,
+  useHomework,
+  useTimetable,
 } from '../shared';
-
-type HwStatus = 'Pending' | 'Submitted' | 'Checked';
-const HW_INITIAL: Record<string, HwStatus> = Object.fromEntries(
-  HOMEWORK.map(h => [h.id, h.status]),
-);
 
 function greeting() {
   const h = new Date().getHours();
@@ -80,95 +81,121 @@ function greeting() {
   return 'Good evening';
 }
 
+const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
 // ---------- S04 Today ----------
 
 function StudentToday() {
   const nav = useNav();
   const tabs = useTabs();
-  const { t } = useI18n();
-  const [status] = useShared('hw.status', HW_INITIAL);
-  const now = TODAY_PERIODS.find(p => p.now) ?? TODAY_PERIODS[0];
-  const upcoming = TODAY_PERIODS.filter(p => !p.now);
-  const due = HOMEWORK.filter(h => status[h.id] === 'Pending');
-  const overdue = LIBRARY.issued.filter(b => b.tone === 'danger').length;
+  const { t, lang } = useI18n();
+  const child = useCurrentChild();
+  const home = useFamily('home', familyApi.home);
+  const tt = useTimetable();
+  const lib = useFamily('library', familyApi.library);
+  const dow = DOW[new Date().getDay()];
+  const periods = (tt.data?.slots ?? [])
+    .filter(x => x.day === dow || x.day.slice(0, 3) === dow)
+    .sort((a, b) => a.period - b.period);
+  const books = (lib.data ?? []).filter(b => !b.returnedOn);
+  const overdue = books.filter(b => b.dueOn < todayIso()).length;
+  const first = child.name.split(' ')[0];
 
   return (
     <Screen
-      title={`${t(greeting())}, ${STUDENT.name.split(' ')[0]}`}
-      subtitle={`${STUDENT.className} · Thursday 22 Oct`}
-      right={<BellButton count={3} />}
+      title={`${t(greeting())}${first ? `, ${first}` : ''}`}
+      subtitle={home.data ? `${child.className} · ${fmtDay(home.data.today.date)}` : child.className}
+      right={<BellButton />}
+      refreshing={home.refreshing}
+      onRefresh={() => {
+        home.refresh();
+        tt.refresh();
+        lib.refresh();
+      }}
     >
-      <HeroCard
-        label={`${t('Now')} · Period ${now.period} · ${now.time}`}
-        value={t(now.subject)}
-        onPress={() => tabs?.go('timetable')}
-      >
-        <Text style={s.heroSub}>
-          {now.teacher} · Room {now.room}
-        </Text>
-      </HeroCard>
+      <QueryView q={home}>
+        {h => (
+          <>
+            {periods.length ? (
+              <HeroCard
+                label={`${t('Today')} · ${periods.length} ${t('periods')}`}
+                value={periods[0].subject ? t(periods[0].subject) : t('Free')}
+                onPress={() => tabs?.go('timetable')}
+              >
+                <Text style={s.heroSub}>
+                  {t('Period')} {periods[0].period}
+                </Text>
+              </HeroCard>
+            ) : null}
 
-      <Card
-        title="Coming up today"
-        action={{ label: 'Timetable', onPress: () => tabs?.go('timetable') }}
-      >
-        {upcoming.map((p, i) => (
-          <ListRow
-            key={p.subject}
-            icon={Clock}
-            title={t(p.subject)}
-            subtitle={`${p.time} · ${p.teacher}`}
-            right={p.next ? <Badge label="Next" tone="warn" /> : undefined}
-            last={i === upcoming.length - 1}
-          />
-        ))}
-      </Card>
+            <Card title="Coming up today" action={{ label: 'Timetable', onPress: () => tabs?.go('timetable') }}>
+              {periods.length ? (
+                periods.map((p, i) => (
+                  <ListRow
+                    key={p.period}
+                    icon={Clock}
+                    title={p.subject ? t(p.subject) : t('Free')}
+                    subtitle={`${t('Period')} ${p.period}`}
+                    last={i === periods.length - 1}
+                  />
+                ))
+              ) : (
+                <Muted>{t('No classes today.')}</Muted>
+              )}
+            </Card>
 
-      <Card
-        title="Homework due"
-        action={{ label: 'All', onPress: () => tabs?.go('homework') }}
-      >
-        {due.length === 0 ? (
-          <Muted>{t('Nothing due. Well done!')}</Muted>
-        ) : (
-          due.map((h, i) => (
-            <ListRow
-              key={h.id}
-              icon={Paperclip}
-              title={h.title}
-              subtitle={`${t(h.subject)} · ${h.due}`}
-              right={<Badge label="Pending" tone="warn" />}
-              onPress={() => nav.push('StudentSubmitHomework', { id: h.id })}
-              last={i === due.length - 1}
-            />
-          ))
+            <Card title="Homework due" action={{ label: 'All', onPress: () => tabs?.go('homework') }}>
+              {h.today.homeworkDue.length === 0 ? (
+                <Muted>{t('Nothing due. Well done!')}</Muted>
+              ) : (
+                h.today.homeworkDue.map((w, i) => (
+                  <ListRow
+                    key={w.id}
+                    icon={Paperclip}
+                    title={w.title}
+                    subtitle={`${t('due')} ${fmtDate(w.dueDate)}`}
+                    right={<Badge label="Pending" tone="warn" />}
+                    onPress={() => nav.push('StudentSubmitHomework', { id: w.id })}
+                    last={i === h.today.homeworkDue.length - 1}
+                  />
+                ))
+              )}
+            </Card>
+
+            <HStack>
+              <InfoTile
+                label="Attendance"
+                value={MARK_LABEL[h.today.attendance] ? t(MARK_LABEL[h.today.attendance]) : '—'}
+                sub={t('Today')}
+                onPress={() => nav.push('Attendance')}
+              />
+              <InfoTile
+                label="Library"
+                value={`${books.length} ${t('books')}`}
+                sub={`${overdue} ${t('overdue')}`}
+                onPress={() => nav.push('Library')}
+              />
+            </HStack>
+
+            <Card title="Notices" action={{ label: 'All', onPress: () => nav.push('Notices') }}>
+              {h.today.notices.length ? (
+                h.today.notices.slice(0, 2).map((n, i, arr) => (
+                  <ListRow
+                    key={n.id}
+                    icon={Bell}
+                    title={n.title}
+                    subtitle={lang === 'ur' && n.bodyUrdu ? n.bodyUrdu : n.body}
+                    onPress={() => nav.push('Notices')}
+                    last={i === arr.length - 1}
+                  />
+                ))
+              ) : (
+                <Muted>{t('No notices yet.')}</Muted>
+              )}
+            </Card>
+          </>
         )}
-      </Card>
-
-      <HStack>
-        <InfoTile
-          label="Attendance"
-          value={`${STUDENT.attendance}%`}
-          sub={t('Present today')}
-          onPress={() => nav.push('Attendance')}
-        />
-        <InfoTile
-          label="Library"
-          value={`${LIBRARY.issued.length} ${t('books')}`}
-          sub={`${overdue} ${t('overdue')}`}
-          onPress={() => nav.push('Library')}
-        />
-      </HStack>
-
-      <Card title="Notices" action={{ label: 'All', onPress: () => nav.push('Notices') }}>
-        <ListRow
-          icon={GraduationCap}
-          title="Result published"
-          subtitle="Mid-term results are in the app."
-          onPress={() => tabs?.go('results')}
-          last
-        />
-      </Card>
+      </QueryView>
     </Screen>
   );
 }
@@ -178,81 +205,82 @@ function StudentToday() {
 function StudentSubmitHomework() {
   const nav = useNav();
   const { t } = useI18n();
-  const id = useParam('id', HOMEWORK[0].id);
-  const hw = HOMEWORK.find(h => h.id === id) ?? HOMEWORK[0];
-  const [status, setStatus] = useShared('hw.status', HW_INITIAL);
+  const id = useParam<number>('id', 0);
+  const q = useHomework();
+  const hw = q.data?.find(h => h.id === id);
   const [answer, setAnswer] = useState('');
-  const [pages, setPages] = useState<string[]>([]);
-  const done = status[hw.id] !== 'Pending';
+  const submit = useMutation((note: string) => familyApi.submitHomework(id, note), 'Homework submitted');
+  const done = hw ? hwBucket(hw) !== 'Pending' : false;
 
-  const submit = () => {
-    if (!answer.trim() && pages.length === 0) {
-      toast(t('Write an answer or add a photo'));
+  const send = async () => {
+    if (!answer.trim()) {
+      toast(t('Write an answer first'));
       return;
     }
-    setStatus(prev => ({ ...prev, [hw.id]: 'Submitted' }));
-    toast(t('Homework submitted'));
-    nav.pop();
+    const r = await submit.run(answer.trim());
+    if (r) {
+      q.setData(list => (list ?? []).map(h => (h.id === id ? { ...h, status: 'submitted', submission: r } : h)));
+      nav.pop();
+    }
   };
 
   return (
     <Screen
-      title={hw.title}
-      subtitle={`${t(hw.subject)} · ${hw.due} · ${hw.maxMarks} ${t('marks')}`}
+      title={hw?.title ?? 'Homework'}
+      subtitle={hw ? `${hw.subject ?? t('General')} · ${t('due')} ${fmtDate(hw.dueDate)}` : undefined}
       footer={
         done ? (
           <InfoBanner tone="success" icon={Check} text={t('Already submitted')} />
         ) : (
-          <Button label="Submit homework" icon={Send} onPress={submit} />
+          <Button label="Submit homework" icon={Send} onPress={send} loading={submit.busy} />
         )
       }
     >
-      <Card title="Instructions">
-        <Body>{hw.instructions}</Body>
-        {hw.file ? (
-          <View style={s.fileRow}>
-            <FileText size={16} color={colors.textMuted} />
-            <Text style={s.fileText}>{hw.file}</Text>
-          </View>
-        ) : null}
-      </Card>
-      {done ? null : (
-        <>
-          <Field
-            label="Your answer"
-            value={answer}
-            onChangeText={setAnswer}
-            multiline
-            placeholder={t('Type your answer here')}
-          />
-          <View style={s.pages}>
-            {pages.map((p, i) => (
-              <View key={p} style={s.page}>
-                <Placeholder label={p} height={86} />
-                <IconButton
-                  icon={X}
-                  style={s.pageRemove}
-                  onPress={() => setPages(ps => ps.filter((_, j) => j !== i))}
-                />
-              </View>
-            ))}
-            {pages.length < 6 ? (
-              <View style={s.page}>
-                <Button
-                  label="Add"
-                  icon={Camera}
-                  variant="outline"
-                  style={s.addPage}
-                  onPress={() =>
-                    setPages(ps => [...ps, `page ${ps.length + 1}`])
-                  }
-                />
-              </View>
-            ) : null}
-          </View>
-          <Muted>{t('Add a clear photo of each page, or a PDF.')}</Muted>
-        </>
-      )}
+      <QueryView q={q} isEmpty={list => !list.some(h => h.id === id)} emptyText="This homework was not found.">
+        {() =>
+          hw ? (
+            <>
+              <Card title="Instructions">
+                <Body>{hw.body || t('No instructions.')}</Body>
+              </Card>
+              {done ? (
+                hw.submission?.note ? (
+                  <Card title="Your answer">
+                    <Body>{String(hw.submission.note)}</Body>
+                    {hw.submission.marks !== undefined ? (
+                      <Text style={s.marks}>
+                        {t('Marks')}: {String(hw.submission.marks)}
+                      </Text>
+                    ) : null}
+                  </Card>
+                ) : null
+              ) : (
+                <>
+                  <Field
+                    label="Your answer"
+                    value={answer}
+                    onChangeText={setAnswer}
+                    multiline
+                    placeholder={t('Type your answer here')}
+                  />
+                  <View style={s.pages}>
+                    <View style={s.page}>
+                      <Button
+                        label="Add"
+                        icon={Camera}
+                        variant="outline"
+                        style={s.addPage}
+                        onPress={() => toast(t('Attaching photos is coming soon'))}
+                      />
+                    </View>
+                  </View>
+                  <Muted>{t('Photo and PDF upload is coming soon. Type your answer for now.')}</Muted>
+                </>
+              )}
+            </>
+          ) : null
+        }
+      </QueryView>
     </Screen>
   );
 }
@@ -260,44 +288,48 @@ function StudentSubmitHomework() {
 // ---------- S18 Fee (view only) ----------
 
 function StudentFee() {
-  const { vouchers } = useChildFee(STUDENT);
-  const list = vouchers.filter(v => v.month !== 'Annual charges');
-  const anyUnpaid = list.some(v => v.status === 'Unpaid');
+  const q = useFees();
+  const { t } = useI18n();
   return (
     <Screen
       title="My fee"
       subtitle="View only. Parents pay from the parent app."
+      refreshing={q.refreshing}
+      onRefresh={q.refresh}
     >
-      <Card>
-        {list.map((v, i) => {
-          const isPaid = v.status === 'Paid';
-          return (
-            <ListRow
-              key={v.id}
-              icon={Receipt}
-              title={v.month}
-              subtitle={v.note}
-              right={
-                <View style={s.amountCol}>
-                  <Text style={s.amount}>{formatRs(v.amount)}</Text>
-                  <Badge
-                    label={isPaid ? 'Paid' : 'Unpaid'}
-                    tone={isPaid ? 'success' : 'danger'}
+      <QueryView q={q} isEmpty={d => d.vouchers.length === 0} emptyText="No vouchers yet.">
+        {d => (
+          <>
+            <Card>
+              {d.vouchers.map((v, i) => {
+                const open = v.status === 'unpaid' || v.status === 'partial';
+                return (
+                  <ListRow
+                    key={v.id}
+                    icon={Receipt}
+                    title={v.month ? monthLabel(v.month) : v.title || v.voucherNo}
+                    subtitle={open ? `${t('Due')} ${fmtDate(v.dueDate)}` : t('Paid')}
+                    right={
+                      <View style={s.amountCol}>
+                        <Text style={s.amount}>{formatRs(open ? v.balance : v.amount)}</Text>
+                        <Badge label={cap(v.status)} tone={statusTone(v.status)} />
+                      </View>
+                    }
+                    last={i === d.vouchers.length - 1}
                   />
-                </View>
-              }
-              last={i === list.length - 1}
-            />
-          );
-        })}
-      </Card>
-      {anyUnpaid ? (
-        <InfoBanner
-          tone="warn"
-          icon={TriangleAlert}
-          text="Admit cards and report cards are held while fee is unpaid."
-        />
-      ) : null}
+                );
+              })}
+            </Card>
+            {d.dues > 0 ? (
+              <InfoBanner
+                tone="warn"
+                icon={TriangleAlert}
+                text="Admit cards and report cards are held while fee is unpaid."
+              />
+            ) : null}
+          </>
+        )}
+      </QueryView>
     </Screen>
   );
 }
@@ -308,27 +340,31 @@ function StudentProfile() {
   const nav = useNav();
   const { signOut } = useSession();
   const { t, lang, setLang } = useI18n();
+  const q = useFamily('profile', familyApi.profile);
   const toggleLang = () => setLang(lang === 'en' ? 'ur' : 'en');
   return (
     <Screen
       title="Me"
       right={<IconButton icon={Globe} onPress={toggleLang} />}
+      refreshing={q.refreshing}
+      onRefresh={q.refresh}
     >
-      <Card style={s.idCard}>
-        <Avatar name={STUDENT.name} size={64} ring />
-        <Text style={s.idName}>{STUDENT.name}</Text>
-        <Text style={s.idMeta}>
-          {STUDENT.gr} · {STUDENT.className} · Roll {STUDENT.roll}
-        </Text>
-        <QRCode value={STUDENT.gr} size={120} />
-        <Text style={s.idValid}>{t('Digital ID card · valid till 31 Mar 2027')}</Text>
-      </Card>
+      <QueryView q={q}>
+        {p => (
+          <Card style={s.idCard}>
+            <Avatar name={p.name} size={64} ring />
+            <Text style={s.idName}>{p.name}</Text>
+            <Text style={s.idMeta}>
+              {p.grNo} · {p.className}-{p.section}
+              {p.rollNo ? ` · ${t('Roll')} ${p.rollNo}` : ''}
+            </Text>
+            <QRCode value={p.grNo} size={120} />
+            <Text style={s.idValid}>{t('Digital ID card')}</Text>
+          </Card>
+        )}
+      </QueryView>
       <Card>
-        <ListRow
-          icon={Lock}
-          title={t('Change password')}
-          onPress={() => nav.push('ChangePassword')}
-        />
+        <ListRow icon={Lock} title={t('Change password')} onPress={() => nav.push('ChangePassword')} />
         <ListRow
           icon={Globe}
           title={t('Language')}
@@ -354,9 +390,7 @@ function StudentProfile() {
 function StudentMore() {
   const nav = useNav();
   const { t } = useI18n();
-  const groups: Array<
-    Array<{ icon: typeof File; label: string; route: string }>
-  > = [
+  const groups: Array<Array<{ icon: typeof File; label: string; route: string }>> = [
     [
       { icon: File, label: 'Daily diary', route: 'Diary' },
       { icon: Check, label: 'Attendance', route: 'Attendance' },
@@ -373,7 +407,7 @@ function StudentMore() {
     ],
   ];
   return (
-    <Screen title="More" right={<BellButton count={3} />}>
+    <Screen title="More" right={<BellButton />}>
       {groups.map((g, gi) => (
         <Card key={gi}>
           {g.map((item, i) => (
@@ -414,27 +448,9 @@ export const studentScreens: ScreenMap = {
 
 const s = StyleSheet.create({
   heroSub: { fontSize: 12.5, fontWeight: '700', color: colors.text },
-  fileRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    padding: 11,
-    marginTop: 10,
-  },
-  fileText: { fontSize: 13.5, color: colors.textMuted, fontWeight: '600' },
+  marks: { fontSize: 13.5, color: colors.textMuted, fontWeight: '700', marginTop: 8 },
   pages: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   page: { width: 92 },
-  pageRemove: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    width: 26,
-    height: 26,
-    borderRadius: 8,
-  },
   addPage: {
     height: 86,
     flexDirection: 'column',

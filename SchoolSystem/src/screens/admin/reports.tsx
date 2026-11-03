@@ -10,7 +10,6 @@ import { ScreenMap, ScreenProps, useNav, useParam } from '../../navigation';
 import {
   ALL_CAMPUSES,
   CAMPUSES,
-  CLASSES,
   SECTIONS,
   SESSIONS,
   campusName,
@@ -19,7 +18,12 @@ import {
   useCampus,
   useStaffRole,
 } from '../../data/admin';
-import { REPORTS, canSeeReport, reportData } from '../../data/admin-reports';
+import { LIVE_REPORTS, LiveRow, REPORTS, canSeeReport, liveReportData, reportData } from '../../data/admin-reports';
+import { useLiveClasses, useLiveStudents } from '../../data/admin-frontdesk';
+import { NoApiBanner, QueryView } from '../../components/states';
+import { useApi } from '../../api/hooks';
+import { useApiSession } from '../../api/session';
+import { webA } from '../../api/webA';
 
 export function AdminReportsCenter(_: ScreenProps) {
   const nav = useNav();
@@ -34,12 +38,12 @@ export function AdminReportsCenter(_: ScreenProps) {
       searchText={r => `${r.title} ${r.module}`}
       filters={[{ label: 'Phase', options: ['All phases', 'Phase 1', 'Phase 2', 'Phase 3'], get: r => `Phase ${r.phase}` }]}
       pageSize={15}
-      header={<InfoBanner text="Every report has campus, session, class, section and date filters, with PDF, Excel and print." />}
+      header={<InfoBanner text={`Every report has campus, session, class, section and date filters, with PDF, Excel and print. ${list.filter(r => LIVE_REPORTS[r.id]).length} use live school data.`} />}
       renderItem={(r, last) => (
         <ListRow
           icon={ChartColumn}
           title={`${r.no}. ${r.title}`}
-          subtitle={`${r.module} · Phase ${r.phase} · ${r.users.join(', ')}`}
+          subtitle={`${r.module} · Phase ${r.phase} · ${r.users.join(', ')}${LIVE_REPORTS[r.id] ? ' · live' : ''}`}
           onPress={() => nav.push('AdminReport', { id: r.id })}
           chevron
           last={last}
@@ -50,6 +54,27 @@ export function AdminReportsCenter(_: ScreenProps) {
 }
 
 const RANGES = ['Today', 'This week', 'This month', 'Last month', 'This session'];
+
+// Live rows with a date are kept when the date falls in the range.
+function inRange(date: string | undefined, range: string) {
+  if (!date || range === 'This session') {
+    return true;
+  }
+  const d = new Date(`${date.slice(0, 10)}T00:00:00`);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (range === 'Today') {
+    return d.getTime() === today.getTime();
+  }
+  if (range === 'This week') {
+    return d >= new Date(today.getTime() - 6 * 86400000) && d <= new Date(today.getTime() + 86400000 * 7);
+  }
+  if (range === 'This month') {
+    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+  }
+  const last = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  return d.getFullYear() === last.getFullYear() && d.getMonth() === last.getMonth();
+}
 const PAGE = 25;
 
 function AdminReport(_: ScreenProps) {
@@ -59,22 +84,40 @@ function AdminReport(_: ScreenProps) {
   const [globalSession] = useAdminSession();
   const report = REPORTS.find(r => r.id === id);
   const [campus, setCampus] = useState(campusName(globalCampus));
-  const [session, setSession] = useState(globalSession);
+  const [apiSession] = useApiSession();
+  const liveSession = apiSession?.sessions.find(x => x.id === apiSession.sessionId) ?? apiSession?.sessions.find(x => x.isCurrent);
+  const [session, setSession] = useState(liveSession?.name ?? globalSession);
   const [cls, setCls] = useState('All classes');
   const [section, setSection] = useState('All sections');
   const [range, setRange] = useState('This month');
   const [shown, setShown] = useState(PAGE);
-  const data = useMemo(() => reportData(id), [id]);
+  const classes = useLiveClasses();
+  const { list: students } = useLiveStudents();
+  const kind = LIVE_REPORTS[id];
+  const q = useApi(kind ? `adm:report:${kind}` : null, () => webA.report(kind));
+  const liveCampuses = apiSession?.campuses ?? [];
+  const campusOptions = liveCampuses.length ? liveCampuses.map(c => c.name) : CAMPUSES.map(c => c.name);
+  const sessionOptions = apiSession?.sessions.length ? apiSession.sessions.map(x => x.name) : SESSIONS.map(x => x.id);
+  const studentName = useMemo(() => new Map(students.map(x => [x.id, x.name])), [students]);
+  const data = useMemo(
+    () =>
+      kind
+        ? liveReportData(id, q.data?.rows ?? [], { cls: classes.nameOf, student: (v: unknown) => studentName.get(String(v)) ?? (v ? `#${v}` : '—') })
+        : reportData(id),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [id, kind, q.data, classes.classes, studentName],
+  );
 
   const rows = useMemo(() => {
-    const campusId = CAMPUSES.find(c => c.name === campus)?.id ?? ALL_CAMPUSES;
+    const campusId = kind ? ALL_CAMPUSES : CAMPUSES.find(c => c.name === campus)?.id ?? ALL_CAMPUSES;
     return data.rows.filter(
       r =>
         (campusId === ALL_CAMPUSES || !r.campus || r.campus === campusId) &&
         (cls === 'All classes' || !r.cls || r.cls === cls) &&
-        (section === 'All sections' || !r.section || r.section === section),
+        (section === 'All sections' || !r.section || r.section === section) &&
+        (!kind || inRange((r as LiveRow).date, range)),
     );
-  }, [data, campus, cls, section]);
+  }, [data, campus, cls, section, kind, range]);
 
   if (!report) {
     return (
@@ -101,7 +144,9 @@ function AdminReport(_: ScreenProps) {
   return (
     <Screen
       title={`${report.no}. ${report.title}`}
-      subtitle={`${report.module} · Phase ${report.phase}`}
+      subtitle={`${report.module} · Phase ${report.phase}${kind ? ' · live' : ' · sample'}`}
+      refreshing={kind ? q.refreshing : undefined}
+      onRefresh={kind ? q.refresh : undefined}
       footer={
         <View style={adminStyles.row}>
           <Button label="PDF" icon={FileText} variant="outline" style={s.flex} onPress={() => exp('PDF')} />
@@ -110,16 +155,18 @@ function AdminReport(_: ScreenProps) {
         </View>
       }
     >
+      {kind ? <QueryView q={q}>{() => null}</QueryView> : <NoApiBanner what="This report (sample rows)" />}
+      {kind && liveCampuses.length > 1 ? <InfoBanner text="Live reports follow the campus picked in the top bar." /> : null}
       <Card>
         <View style={s.filters}>
           <View style={s.half}>
-            <PickerField label="Campus" value={campus} options={['All campuses', ...CAMPUSES.map(c => c.name)]} onChange={v => { setCampus(v); setShown(PAGE); }} />
+            <PickerField label="Campus" value={campus} options={['All campuses', ...campusOptions]} onChange={v => { setCampus(v); setShown(PAGE); }} />
           </View>
           <View style={s.half}>
-            <PickerField label="Session" value={session} options={SESSIONS.map(x => x.id)} onChange={setSession} />
+            <PickerField label="Session" value={session} options={sessionOptions} onChange={setSession} />
           </View>
           <View style={s.half}>
-            <PickerField label="Class" value={cls} options={['All classes', ...CLASSES]} onChange={v => { setCls(v); setShown(PAGE); }} />
+            <PickerField label="Class" value={cls} options={['All classes', ...classes.names]} onChange={v => { setCls(v); setShown(PAGE); }} />
           </View>
           <View style={s.half}>
             <PickerField label="Section" value={section} options={['All sections', ...SECTIONS]} onChange={v => { setSection(v); setShown(PAGE); }} />

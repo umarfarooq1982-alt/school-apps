@@ -11,18 +11,20 @@ import {
   ListRow,
   Screen,
   toast,
-  Toggle,
 } from '../../../components/ui';
-import { adminStyles as a, FormSheet, ListScreen } from '../../../components/admin';
+import { adminStyles as a, FormSheet, ListScreen, PickerField } from '../../../components/admin';
 import { ScreenProps, useNav, useParam } from '../../../navigation';
 import { useShared } from '../../../store';
-import { CAMPUSES, logAudit } from '../../../data/admin';
-import { AdminUser, Perm, PERMS, ROLE_DEFS, RoleDef, USERS } from '../../../data/admin-owner';
+import { logAudit } from '../../../data/admin';
+import { Perm, PERMS, ROLE_DEFS, RoleDef } from '../../../data/admin-owner';
+import { useApi, useMutation } from '../../../api/hooks';
+import { SERVER_PERMISSIONS, WebUser, webA } from '../../../api/webA';
+import { getSession } from '../../../api/session';
+import { NoApiBanner } from '../../../components/states';
 import { colors, radius } from '../../../theme';
 import { defaultPerms, PANELS, useMatrix } from '../menu';
 import { localId, ReadOnlyBanner, useGuard } from './shared';
 
-export const useUsers = () => useShared<AdminUser[]>('admin.users', USERS);
 export const useRoleDefs = () => useShared<RoleDef[]>('admin.roleDefs', ROLE_DEFS);
 
 function MultiChips({
@@ -52,67 +54,140 @@ function MultiChips({
   );
 }
 
-function UserForm({ initial, onClose }: { initial: AdminUser; onClose: () => void }) {
-  const [, setUsers] = useUsers();
-  const [roles] = useRoleDefs();
+const SERVER_ROLES = ['principal', 'frontdesk', 'accounts', 'hr', 'exam', 'transport', 'store', 'librarian', 'teacher'];
+
+type UserDraft = {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  role: string;
+  password: string;
+  campusIds: string[];
+  permissions: string[];
+  staffId: string;
+};
+
+function UserForm({ initial, onClose, onSaved }: { initial: UserDraft; onClose: () => void; onSaved: () => void }) {
+  const ctx = useApi('adm:context', webA.context);
+  const staff = useApi('adm:staff:all', webA.staff);
+  const staffOptions = (staff.data ?? []).map(x => ({ id: String(x.id), label: `${x.name} (${x.empId})` }));
   const [f, setF] = useState(initial);
-  const save = () => {
-    if (!f.name.trim() || !/\S+@\S+/.test(f.email)) {
-      toast('Enter a name and a valid email');
+  const staffLabel = staffOptions.find(o => o.id === f.staffId)?.label ?? '';
+  const editing = !!f.id;
+  const { run, busy } = useMutation(async () => {
+    if (editing) {
+      return webA.saveAccess(f.id, { permissions: f.permissions, campusIds: f.campusIds, ...(f.staffId ? { staffId: f.staffId } : {}) });
+    }
+    return webA.createUser({
+      name: f.name.trim(),
+      email: f.email.trim().toLowerCase(),
+      phone: f.phone || undefined,
+      role: f.role,
+      password: f.password,
+      campusIds: f.campusIds,
+      permissions: f.permissions.length ? f.permissions : undefined,
+      staffId: f.staffId || undefined,
+    });
+  }, editing ? 'Access saved' : 'User created');
+  const save = async () => {
+    if (!editing) {
+      if (!f.name.trim() || !/\S+@\S+\.\S+/.test(f.email)) {
+        toast('Enter a name and a valid email');
+        return;
+      }
+      if (f.password.length < 6) {
+        toast('First password needs at least 6 characters');
+        return;
+      }
+    }
+    if (f.role === 'teacher' && !f.staffId) {
+      toast('Link the teacher to a staff record');
       return;
     }
-    if (!f.roles.length || !f.campuses.length) {
-      toast('Assign at least one role and one campus');
+    if (!f.campusIds.length) {
+      toast('Assign at least one campus');
       return;
     }
-    if (f.id) {
-      setUsers(l => l.map(u => (u.id === f.id ? f : u)));
-      logAudit('Users', `Edited ${f.name}: roles ${f.roles.join(', ')}; campuses ${f.campuses.join(', ')}`);
-    } else {
-      setUsers(l => [{ ...f, id: localId('u') }, ...l]);
-      logAudit('Users', `Created user ${f.name} (${f.email}) as ${f.roles.join(', ')}`);
+    if (busy) {
+      return;
     }
-    toast('User saved. Login details sent by SMS and email.');
-    onClose();
+    if ((await run()) !== undefined) {
+      logAudit('Users', editing ? `Access changed for ${f.name}` : `Created user ${f.name} (${f.email}) as ${f.role}`);
+      onSaved();
+      onClose();
+    }
   };
   return (
-    <FormSheet visible onClose={onClose} title={f.id ? 'Edit user' : 'Create user'} onSubmit={save}>
-      <Field label="Full name" value={f.name} onChangeText={v => setF(p => ({ ...p, name: v }))} />
-      <Field label="Email or mobile" value={f.email} onChangeText={v => setF(p => ({ ...p, email: v }))} autoCapitalize="none" />
-      <Text style={a.bold}>Roles</Text>
-      <MultiChips
-        options={roles.map(r => ({ key: r.name, label: r.name }))}
-        value={f.roles}
-        onChange={v => setF(p => ({ ...p, roles: v }))}
-      />
+    <FormSheet visible onClose={onClose} title={editing ? `Access · ${f.name}` : 'Create user'} onSubmit={save} submitLabel={busy ? 'Saving…' : 'Save'}>
+      {editing ? null : (
+        <>
+          <Field label="Full name" value={f.name} onChangeText={v => setF(p => ({ ...p, name: v }))} />
+          <Field label="Email" value={f.email} onChangeText={v => setF(p => ({ ...p, email: v }))} autoCapitalize="none" keyboardType="email-address" />
+          <Field label="Mobile" value={f.phone} onChangeText={v => setF(p => ({ ...p, phone: v }))} keyboardType="phone-pad" />
+          <Field label="First password" value={f.password} onChangeText={v => setF(p => ({ ...p, password: v }))} secureTextEntry />
+          <Text style={a.bold}>Role</Text>
+          <MultiChips
+            options={SERVER_ROLES.map(r => ({ key: r, label: r }))}
+            value={[f.role]}
+            onChange={v => setF(p => ({ ...p, role: v.filter(x => x !== p.role)[0] ?? p.role }))}
+          />
+        </>
+      )}
+      {f.role === 'parent' || f.role === 'student' ? null : (
+        <>
+          <PickerField label="Linked staff record" value={staffLabel} options={staffOptions.map(o => o.label)} onChange={v => setF(p => ({ ...p, staffId: staffOptions.find(o => o.label === v)?.id ?? '' }))} placeholder="Choose the staff member" />
+          <Text style={a.small}>A teacher login must be linked to its staff record, or the teacher app cannot load classes. One login per staff member.</Text>
+        </>
+      )}
       <Text style={a.bold}>Campuses</Text>
       <MultiChips
-        options={CAMPUSES.map(c => ({ key: c.id, label: c.name }))}
-        value={f.campuses}
-        onChange={v => setF(p => ({ ...p, campuses: v }))}
+        options={(ctx.data?.campuses ?? []).map(c => ({ key: String(c.id), label: c.name }))}
+        value={f.campusIds}
+        onChange={v => setF(p => ({ ...p, campusIds: v }))}
       />
-      <View style={a.row}>
-        <Text style={[a.bold, a.flex]}>Login enabled</Text>
-        <Toggle value={f.active} onChange={v => setF(p => ({ ...p, active: v }))} />
-      </View>
+      <Text style={a.bold}>Permissions (empty = role default)</Text>
+      <MultiChips
+        options={SERVER_PERMISSIONS.map(x => ({ key: x, label: x }))}
+        value={f.permissions}
+        onChange={v => setF(p => ({ ...p, permissions: v }))}
+      />
     </FormSheet>
   );
 }
 
+const fmtLogin = (iso: string | null) => (iso ? new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Never');
+
 export function AdminUsersRoles(_: ScreenProps) {
   const nav = useNav();
-  const [users, setUsers] = useUsers();
+  const q = useApi('adm:users', webA.users);
   const { guard } = useGuard();
-  const [editing, setEditing] = useState<AdminUser | null>(null);
-  const toggle = (u: AdminUser) =>
-    guard(() => {
-      if (u.roles.includes('Owner / Super Admin')) {
+  const [editing, setEditing] = useState<UserDraft | null>(null);
+  const toggleRun = useMutation((id: string) => webA.toggleUser(id));
+  const toggle = (u: WebUser) =>
+    guard(async () => {
+      if (u.role === 'owner') {
         toast('The Owner account cannot be disabled');
         return;
       }
-      setUsers(l => l.map(x => (x.id === u.id ? { ...x, active: !x.active } : x)));
-      logAudit('Users', `${u.name} ${u.active ? 'disabled' : 'enabled'}`);
+      if ((await toggleRun.run(u.id)) !== undefined) {
+        logAudit('Users', `${u.name} ${u.disabled ? 'enabled' : 'disabled'}`);
+        q.refresh();
+      }
     })();
+  const sessionCampus = getSession()?.campusId;
+  const fresh = (): UserDraft => ({
+    id: '',
+    name: '',
+    email: '',
+    phone: '',
+    role: 'teacher',
+    password: '',
+    campusIds: sessionCampus && sessionCampus !== 'all' ? [sessionCampus] : [],
+    permissions: [],
+    staffId: '',
+  });
+  const users = q.data ?? [];
   return (
     <>
       <ListScreen
@@ -120,16 +195,18 @@ export function AdminUsersRoles(_: ScreenProps) {
         subtitle={`${users.length} users`}
         items={users}
         keyOf={u => u.id}
-        searchText={u => `${u.name} ${u.email} ${u.roles.join(' ')}`}
+        searchText={u => `${u.name} ${u.email} ${u.role} ${u.phone ?? ''}`}
         filters={[
-          { label: 'Status', options: ['All', 'Active', 'Disabled'], get: u => (u.active ? 'Active' : 'Disabled') },
-          { label: 'Campus', options: ['All', ...CAMPUSES.map(c => c.name)], get: u => (u.campuses.length > 1 ? 'All' : CAMPUSES.find(c => c.id === u.campuses[0])?.name ?? '') },
+          { label: 'Status', options: ['All', 'Active', 'Disabled'], get: u => (u.disabled ? 'Disabled' : 'Active') },
+          { label: 'Role', options: ['All', 'owner', ...SERVER_ROLES, 'parent', 'student'], get: u => u.role },
         ]}
-        onAdd={guard(() => setEditing({ id: '', name: '', email: '', roles: [], campuses: ['main'], active: true, lastLogin: 'Never' }))}
+        onAdd={guard(() => setEditing(fresh()))}
         addLabel="Create user"
+        empty={q.loading ? 'Loading…' : q.error ?? 'No users'}
         header={
           <>
             <ReadOnlyBanner />
+            {q.error ? <InfoBanner tone="danger" text={q.error} /> : null}
             <Button label="Roles & permission matrix" variant="outline" icon={ShieldCheck} onPress={() => nav.push('AdminRoles')} />
           </>
         }
@@ -137,21 +214,39 @@ export function AdminUsersRoles(_: ScreenProps) {
           <ListRow
             avatar={u.name}
             title={u.name}
-            subtitle={`${u.email}\n${u.roles.join(', ')} · ${u.campuses.map(c => CAMPUSES.find(x => x.id === c)?.name.split(' ')[0]).join(', ')} · last login ${u.lastLogin}`}
+            subtitle={`${u.email}${u.phone ? ` · ${u.phone}` : ''}\n${u.role}${u.staffId ? ` · linked to staff #${u.staffId}` : ''}${u.permissions?.length ? ` · ${u.permissions.length} custom permissions` : ''} · last login ${fmtLogin(u.lastLogin)}`}
             right={
               <View style={a.right}>
-                <Badge label={u.active ? 'Active' : 'Disabled'} tone={u.active ? 'success' : 'neutral'} />
-                <Text style={s.link} onPress={() => toggle(u)}>
-                  {u.active ? 'Disable' : 'Enable'}
-                </Text>
+                <Badge label={u.disabled ? 'Disabled' : 'Active'} tone={u.disabled ? 'neutral' : 'success'} />
+                {u.role === 'owner' ? null : (
+                  <Text style={s.link} onPress={() => toggle(u)}>
+                    {u.disabled ? 'Enable' : 'Disable'}
+                  </Text>
+                )}
               </View>
             }
-            onPress={guard(() => setEditing(u))}
+            onPress={
+              u.role === 'owner'
+                ? undefined
+                : guard(() =>
+                    setEditing({
+                      id: u.id,
+                      name: u.name,
+                      email: u.email,
+                      phone: u.phone ?? '',
+                      role: u.role,
+                      password: '',
+                      campusIds: sessionCampus && sessionCampus !== 'all' ? [sessionCampus] : [],
+                      permissions: u.permissions ?? [],
+                      staffId: u.staffId ?? '',
+                    }),
+                  )
+            }
             last={last}
           />
         )}
       />
-      {editing ? <UserForm initial={editing} onClose={() => setEditing(null)} /> : null}
+      {editing ? <UserForm initial={editing} onClose={() => setEditing(null)} onSaved={q.refresh} /> : null}
     </>
   );
 }
@@ -191,6 +286,7 @@ export function AdminRoles(_: ScreenProps) {
         filters={[{ label: 'Type', options: ['All', 'Built-in', 'Custom'], get: r => (r.custom ? 'Custom' : 'Built-in') }]}
         onAdd={guard(() => setOpen(true))}
         addLabel="Create custom role"
+        header={<NoApiBanner what="Roles and the per-screen matrix are kept on this phone; per-user permissions are saved on the server from Users" />}
         renderItem={(r, last) => (
           <ListRow
             icon={UserCog}

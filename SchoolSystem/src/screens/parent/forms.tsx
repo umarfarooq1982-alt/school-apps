@@ -1,17 +1,6 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import {
-  Banknote,
-  Calendar,
-  Camera,
-  Clock,
-  File,
-  Paperclip,
-  Plus,
-  Send,
-  Shield,
-  X,
-} from 'lucide-react-native';
+import { Banknote, Calendar, Camera, Clock, File, Plus, Shield } from 'lucide-react-native';
 import {
   Badge,
   Bubble,
@@ -19,7 +8,6 @@ import {
   Card,
   Chips,
   Field,
-  IconButton,
   InfoBanner,
   ListRow,
   Screen,
@@ -28,44 +16,34 @@ import {
   Toggle,
 } from '../../components/ui';
 import { BottomSheet } from '../../components/Tabs';
-import { colors, radius, Tone } from '../../theme';
+import { Empty, NoApiBanner, QueryView } from '../../components/states';
+import { colors, radius } from '../../theme';
 import { ScreenProps, useNav } from '../../navigation';
-import { useShared } from '../../store';
+import { useSession } from '../../store';
 import { useI18n } from '../../i18n';
 import { useCurrentChild } from '../../data/useChild';
-import { useChildFee } from '../shared';
+import { familyApi, RecordDto } from '../../api/mobile';
+import { useApi, useMutation } from '../../api/hooks';
+import {
+  addDaysIso,
+  cap,
+  daysBetween,
+  fmtDate,
+  statusTone,
+  todayIso,
+  useChildId,
+  useFamily,
+  useFees,
+} from '../shared';
 
-const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const TODAY = new Date(2026, 9, 22);
-
-const addDays = (d: Date, n: number) =>
-  new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
-const fmt = (d: Date) => `${d.getDate()} ${MON[d.getMonth()]} ${d.getFullYear()}`;
-const short = (d: Date) => `${d.getDate()} ${MON[d.getMonth()]}`;
-const dayDiff = (a: Date, b: Date) => Math.round((b.getTime() - a.getTime()) / 86400000);
-
-function AttachChip({
-  name,
-  onRemove,
-}: {
-  name: string;
-  onRemove: () => void;
-}) {
-  return (
-    <View style={s.attach}>
-      <Paperclip size={17} color={colors.textMuted} />
-      <Text style={[s.attachText, s.flex]}>{name}</Text>
-      <Pressable onPress={onRemove} hitSlop={10}>
-        <X size={18} color={colors.textMuted} />
-      </Pressable>
-    </View>
-  );
-}
-
-function AddFile({ label, onPress }: { label: string; onPress: () => void }) {
+// The app has no file picker yet; attachments are not sent.
+function AddFile({ label }: { label: string }) {
   const { t } = useI18n();
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [s.attach, pressed && s.pressed]}>
+    <Pressable
+      onPress={() => toast(t('Attaching photos is coming soon'))}
+      style={({ pressed }) => [s.attach, pressed && s.pressed]}
+    >
       <Camera size={17} color={colors.textMuted} />
       <Text style={s.attachText}>{t(label)}</Text>
     </Pressable>
@@ -74,14 +52,6 @@ function AddFile({ label, onPress }: { label: string; onPress: () => void }) {
 
 // ---------- Leave (P20) ----------
 
-type LeaveReq = {
-  childId: string;
-  range: string;
-  days: number;
-  reason: string;
-  status: 'Pending' | 'Approved' | 'Rejected';
-};
-
 function DateField({
   label,
   value,
@@ -89,204 +59,160 @@ function DateField({
   min,
 }: {
   label: string;
-  value: Date;
-  onChange: (d: Date) => void;
-  min: Date;
+  value: string;
+  onChange: (d: string) => void;
+  min: string;
 }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
-  const days = Array.from({ length: 21 }, (_, i) => addDays(min, i));
+  const days = Array.from({ length: 21 }, (_, i) => addDaysIso(min, i));
   return (
     <View style={s.flex}>
-      <Field label={label} icon={Calendar} value={fmt(value)} onPress={() => setOpen(true)} />
+      <Field label={label} icon={Calendar} value={fmtDate(value, true)} onPress={() => setOpen(true)} />
       <BottomSheet visible={open} onClose={() => setOpen(false)}>
         <Text style={s.sheetTitle}>{t(label)}</Text>
         <View style={s.days}>
-          {days.map(d => {
-            const on = d.getTime() === value.getTime();
-            return (
-              <Pressable
-                key={d.getTime()}
-                onPress={() => {
-                  onChange(d);
-                  setOpen(false);
-                }}
-                style={[s.day, on && s.dayOn]}
-              >
-                <Text style={s.dayText}>{short(d)}</Text>
-              </Pressable>
-            );
-          })}
+          {days.map(d => (
+            <Pressable
+              key={d}
+              onPress={() => {
+                onChange(d);
+                setOpen(false);
+              }}
+              style={[s.day, d === value && s.dayOn]}
+            >
+              <Text style={s.dayText}>{fmtDate(d)}</Text>
+            </Pressable>
+          ))}
         </View>
       </BottomSheet>
     </View>
   );
 }
 
+const LEAVE_TYPES = ['Sick', 'Family', 'Other'];
+
 export function ParentLeave(_: ScreenProps) {
   const { t } = useI18n();
+  const { role } = useSession();
   const child = useCurrentChild();
-  const [from, setFrom] = useState(addDays(TODAY, 1));
-  const [to, setTo] = useState(addDays(TODAY, 2));
+  const childId = useChildId();
+  const today = todayIso();
+  const [from, setFrom] = useState(addDaysIso(today, 1));
+  const [to, setTo] = useState(addDaysIso(today, 1));
+  const [type, setType] = useState('Sick');
   const [reason, setReason] = useState('');
-  const [file, setFile] = useState<string | null>('medical-slip.jpg');
-  const [list, setList] = useShared<LeaveReq[]>('parent.leaves', [
-    { childId: 'ayesha', range: '2 – 3 Oct', days: 2, reason: 'Family wedding', status: 'Approved' },
-    { childId: 'ayesha', range: '14 Sep', days: 1, reason: 'Fever', status: 'Approved' },
-  ]);
-  const mine = list.filter(l => l.childId === child.id);
-  const send = () => {
+  const q = useFamily('leave', familyApi.leave);
+  const days = Math.max(1, daysBetween(from, to));
+  const apply = useMutation(
+    () => familyApi.applyLeave({ from, to, reason: reason.trim(), type, days }, childId),
+    'Sent to class teacher',
+  );
+  const send = async () => {
     if (reason.trim().length < 5) {
       toast(t('Please write the reason'));
       return;
     }
-    const days = dayDiff(from, to) + 1;
-    const range =
-      days === 1 ? short(from) : `${from.getDate()} – ${short(to)}`;
-    setList(l => [
-      { childId: child.id, range, days, reason: reason.trim(), status: 'Pending' },
-      ...l,
-    ]);
-    setReason('');
-    toast(t('Sent to class teacher'));
+    if ((await apply.run()) !== undefined) {
+      setReason('');
+      q.refresh();
+    }
   };
-  const TONE: Record<LeaveReq['status'], Tone> = {
-    Pending: 'warn',
-    Approved: 'success',
-    Rejected: 'danger',
-  };
+  const isParent = role === 'parent';
   return (
-    <Screen title="Leave" subtitle={child.name}>
-      <View style={s.row}>
-        <DateField
-          label="From"
-          value={from}
-          min={TODAY}
-          onChange={d => {
-            setFrom(d);
-            if (to.getTime() < d.getTime()) {
-              setTo(d);
-            }
-          }}
-        />
-        <DateField label="To" value={to} min={from} onChange={setTo} />
-      </View>
-      <Field
-        label="Reason"
-        value={reason}
-        onChangeText={setReason}
-        multiline
-        placeholder="Fever since last night. Doctor advised rest for two days."
-      />
-      {file ? (
-        <AttachChip name={file} onRemove={() => setFile(null)} />
-      ) : (
-        <AddFile label="Add photo or file" onPress={() => setFile('medical-slip.jpg')} />
-      )}
-      <Button label="Send to class teacher" onPress={send} />
-      <Card title="Earlier requests">
-        {mine.length ? (
-          mine.map((l, i) => (
-            <ListRow
-              key={`${l.range}-${i}`}
-              title={`${l.range} · ${l.days} ${t(l.days === 1 ? 'day' : 'days')}`}
-              subtitle={l.reason}
-              right={<Badge label={l.status} tone={TONE[l.status]} />}
-              last={i === mine.length - 1}
+    <Screen title="Leave" subtitle={child.name} refreshing={q.refreshing} onRefresh={q.refresh}>
+      {isParent ? (
+        <>
+          <View style={s.row}>
+            <DateField
+              label="From"
+              value={from}
+              min={today}
+              onChange={d => {
+                setFrom(d);
+                if (to < d) {
+                  setTo(d);
+                }
+              }}
             />
-          ))
-        ) : (
-          <Text style={s.empty}>{t('No leave requests yet.')}</Text>
+            <DateField label="To" value={to} min={from} onChange={setTo} />
+          </View>
+          <Chips options={LEAVE_TYPES} value={type} onChange={setType} />
+          <Field
+            label="Reason"
+            value={reason}
+            onChangeText={setReason}
+            multiline
+            placeholder="Fever since last night. Doctor advised rest for two days."
+          />
+          <AddFile label="Add photo or file" />
+          <Button label={`${t('Send to class teacher')} · ${days} ${t(days === 1 ? 'day' : 'days')}`} onPress={send} loading={apply.busy} />
+        </>
+      ) : (
+        <InfoBanner text={t('Leave is applied by a parent from the parent app.')} />
+      )}
+      <QueryView q={q}>
+        {list => (
+          <Card title="Earlier requests">
+            {list.length ? (
+              list.map((l, i) => (
+                <ListRow
+                  key={l.id}
+                  title={`${fmtDate(l.from_date)}${l.to_date !== l.from_date ? ` – ${fmtDate(l.to_date)}` : ''} · ${l.days} ${t(l.days === 1 ? 'day' : 'days')}`}
+                  subtitle={[l.leave_type, l.reason].filter(Boolean).join(' · ')}
+                  right={<Badge label={cap(l.status)} tone={statusTone(l.status)} />}
+                  last={i === list.length - 1}
+                />
+              ))
+            ) : (
+              <Text style={s.empty}>{t('No leave requests yet.')}</Text>
+            )}
+          </Card>
         )}
-      </Card>
+      </QueryView>
     </Screen>
   );
 }
 
 // ---------- Complaints (P25, P26) ----------
 
-type Complaint = {
-  id: string;
-  category: string;
-  status: string;
-  assigned: string;
-  messages: Array<{ mine: boolean; who: string; text: string }>;
-};
-
 function useComplaints() {
-  return useShared<Complaint[]>('parent.complaints', [
-    {
-      id: 'C-0042',
-      category: 'Transport',
-      status: 'In progress',
-      assigned: 'Transport Manager',
-      messages: [
-        { mine: true, who: 'You · 20 Oct', text: 'The van reached 25 minutes late twice this week.' },
-        { mine: false, who: 'School · 21 Oct', text: 'Sorry for this. The route was changed for road work; we are fixing the timing from Monday.' },
-        { mine: true, who: 'You · 21 Oct', text: 'Thank you, please inform us by SMS.' },
-      ],
-    },
-  ]);
+  return useApi('family-complaints', familyApi.complaints);
 }
 
 export function ParentComplaints(_: ScreenProps) {
   const nav = useNav();
   const { t } = useI18n();
-  const [list, setList] = useComplaints();
-  const [selId, setSelId] = useShared('parent.complaintSel', 'C-0042');
-  const [reply, setReply] = useState('');
+  const q = useComplaints();
+  const [selId, setSelId] = useState<number | undefined>(undefined);
+  const list = q.data ?? [];
   const c = list.find(x => x.id === selId) ?? list[0];
-  const send = () => {
-    const text = reply.trim();
-    if (!text) {
-      return;
-    }
-    setList(l =>
-      l.map(x =>
-        x.id === c.id
-          ? { ...x, messages: [...x.messages, { mine: true, who: 'You · 22 Oct', text }] }
-          : x,
-      ),
-    );
-    setReply('');
-  };
   return (
     <Screen
-      title={`${c.id} · ${c.category}`}
-      subtitle={`${c.status} · ${t('assigned to')} ${c.assigned}`}
-      footer={
-        <>
-          <View style={s.replyRow}>
-            <View style={s.flex}>
-              <Field
-                value={reply}
-                onChangeText={setReply}
-                placeholder={t('Write a reply...')}
-                onSubmitEditing={send}
-                returnKeyType="send"
-              />
-            </View>
-            <IconButton icon={Send} onPress={send} style={s.sendBtn} />
-          </View>
-          <Button
-            label="New complaint"
-            variant="outline"
-            icon={Plus}
-            onPress={() => nav.push('ParentNewComplaint')}
-          />
-        </>
-      }
+      title={c ? `C-${String(c.id).padStart(4, '0')} · ${c.category}` : 'Complaints'}
+      subtitle={c ? cap(c.status) : undefined}
+      refreshing={q.refreshing}
+      onRefresh={q.refresh}
+      footer={<Button label="New complaint" variant="outline" icon={Plus} onPress={() => nav.push('ParentNewComplaint')} />}
     >
-      {list.length > 1 ? (
-        <Chips
-          options={list.map(x => x.id)}
-          value={c.id}
-          onChange={setSelId}
-        />
-      ) : null}
-      {c.messages.map((m, i) => (
-        <Bubble key={i} mine={m.mine} who={m.who} text={m.text} />
-      ))}
+      <QueryView q={q} isEmpty={d => d.length === 0} emptyText="No complaints yet.">
+        {() =>
+          c ? (
+            <>
+              {list.length > 1 ? (
+                <Chips
+                  options={list.map(x => `C-${String(x.id).padStart(4, '0')}`)}
+                  value={`C-${String(c.id).padStart(4, '0')}`}
+                  onChange={v => setSelId(Number(v.replace(/\D/g, '')))}
+                />
+              ) : null}
+              <Bubble mine who={c.raisedBy || t('You')} text={c.body} />
+              <Badge label={cap(c.status)} tone={statusTone(c.status)} />
+              <NoApiBanner what={t('Replies from the school')} />
+            </>
+          ) : null
+        }
+      </QueryView>
       <Pressable onPress={() => nav.push('ParentSurvey')}>
         <Text style={s.link}>{t('Answer the parent survey')} ›</Text>
       </Pressable>
@@ -299,42 +225,24 @@ const CATEGORIES = ['Academics', 'Fee', 'Transport', 'Behaviour', 'Facilities', 
 export function ParentNewComplaint(_: ScreenProps) {
   const nav = useNav();
   const { t } = useI18n();
-  const [list, setList] = useComplaints();
-  const [, setSel] = useShared('parent.complaintSel', 'C-0042');
+  const q = useComplaints();
   const [cat, setCat] = useState('Transport');
   const [text, setText] = useState('');
-  const [file, setFile] = useState<string | null>(null);
-  const send = () => {
+  const create = useMutation(() => familyApi.createComplaint(cat, text.trim()));
+  const send = async () => {
     if (text.trim().length < 10) {
       toast(t('Please describe the complaint'));
       return;
     }
-    const newId = `C-00${42 + list.length}`;
-    setList(l => [
-        {
-          id: newId,
-          category: cat,
-          status: 'Open',
-          assigned: 'Front desk',
-          messages: [
-            {
-              mine: true,
-              who: 'You · 22 Oct',
-              text: file ? `${text.trim()}\n📎 ${file}` : text.trim(),
-            },
-          ],
-        },
-        ...l,
-    ]);
-    setSel(newId);
-    toast(`${t('Complaint sent')}: ${newId}`);
-    nav.pop();
+    const r = await create.run();
+    if (r) {
+      toast(`${t('Complaint sent')}: C-${String(r.id).padStart(4, '0')}`);
+      q.setData(prev => [r, ...(prev ?? [])]);
+      nav.pop();
+    }
   };
   return (
-    <Screen
-      title="New complaint"
-      footer={<Button label="Send complaint" onPress={send} />}
-    >
+    <Screen title="New complaint" footer={<Button label="Send complaint" onPress={send} loading={create.busy} />}>
       <Text style={s.label}>{t('Category')}</Text>
       <Chips options={CATEGORIES} value={cat} onChange={setCat} />
       <Field
@@ -344,78 +252,104 @@ export function ParentNewComplaint(_: ScreenProps) {
         multiline
         placeholder="The van reached 25 minutes late twice this week."
       />
-      {file ? (
-        <AttachChip name={file} onRemove={() => setFile(null)} />
-      ) : (
-        <AddFile label="Add photo or file" onPress={() => setFile('photo-1.jpg')} />
-      )}
-      <InfoBanner
-        icon={Clock}
-        text={t('You get a complaint number and can follow every reply here.')}
-      />
+      <AddFile label="Add photo or file" />
+      <InfoBanner icon={Clock} text={t('You get a complaint number and can follow its status here.')} />
     </Screen>
   );
 }
 
 // ---------- Survey (P27) ----------
 
-const QUESTIONS = [
+const SAMPLE_QUESTIONS = [
   'How satisfied are you with teaching?',
   'How safe is school transport?',
   'How clear is communication from the school?',
 ];
 
+function surveyQuestions(r?: RecordDto): string[] | null {
+  const qs = r?.questions;
+  return Array.isArray(qs) && qs.every(x => typeof x === 'string') ? (qs as string[]) : null;
+}
+
 export function ParentSurvey(_: ScreenProps) {
   const nav = useNav();
   const { t } = useI18n();
-  const [ratings, setRatings] = useState<number[]>([4, 3, 0]);
-  const [note, setNote] = useState('Please add more sports activities after school.');
-  const send = () => {
-    if (ratings.some(r => r === 0)) {
+  const q = useApi('family-surveys', familyApi.surveys);
+  const survey = (q.data ?? []).find(x => x.status !== 'closed');
+  const fromServer = surveyQuestions(survey);
+  const questions = fromServer ?? SAMPLE_QUESTIONS;
+  const [ratings, setRatings] = useState<number[]>([]);
+  const [note, setNote] = useState('');
+  const submit = useMutation(
+    () =>
+      familyApi.answerSurvey(survey?.id ?? 'parent-feedback', {
+        ratings: Object.fromEntries(questions.map((x, i) => [x, ratings[i] ?? 0])),
+        suggestion: note.trim(),
+      }),
+    'Thank you! Answers sent',
+  );
+  const send = async () => {
+    if (questions.some((_q, i) => !ratings[i])) {
       toast(t('Please answer every question'));
       return;
     }
-    toast(t('Thank you! Answers sent'));
-    nav.pop();
+    if ((await submit.run()) !== undefined) {
+      nav.pop();
+    }
   };
   return (
     <Screen
       title="Parent survey"
-      subtitle={`Term 1 feedback · ${QUESTIONS.length} questions`}
-      footer={<Button label="Send answers" onPress={send} />}
+      subtitle={`${survey?.title ?? t('Feedback')} · ${questions.length} ${t('questions')}`}
+      footer={<Button label="Send answers" onPress={send} loading={submit.busy} />}
     >
-      {QUESTIONS.map((q, i) => (
-        <Card key={q}>
-          <Text style={s.question}>{t(q)}</Text>
-          <StarRating
-            value={ratings[i]}
-            onChange={v => setRatings(r => r.map((x, j) => (j === i ? v : x)))}
-          />
-        </Card>
-      ))}
-      <Field label="Any suggestion?" value={note} onChangeText={setNote} multiline />
+      <QueryView q={q}>
+        {() => (
+          <>
+            {fromServer ? null : <NoApiBanner what={t('Survey questions')} />}
+            {questions.map((qq, i) => (
+              <Card key={qq}>
+                <Text style={s.question}>{t(qq)}</Text>
+                <StarRating
+                  value={ratings[i] ?? 0}
+                  onChange={v =>
+                    setRatings(r => {
+                      const next = [...r];
+                      next[i] = v;
+                      return next;
+                    })
+                  }
+                />
+              </Card>
+            ))}
+            <Field label="Any suggestion?" value={note} onChangeText={setNote} multiline />
+          </>
+        )}
+      </QueryView>
     </Screen>
   );
 }
 
 // ---------- Pickup persons (P28) ----------
 
-type Person = { name: string; relation: string; cnic: string; locked?: boolean; photo?: boolean };
+const pName = (r: RecordDto) => String(r.name ?? r.title ?? '');
+const pRelation = (r: RecordDto) => String(r.relation ?? r.status ?? '');
+const pCnic = (r: RecordDto) => String(r.cnic ?? r.notes ?? '');
 
 export function ParentPickup(_: ScreenProps) {
   const { t } = useI18n();
   const child = useCurrentChild();
+  const childId = useChildId();
   const first = child.name.split(' ')[0];
-  const [people, setPeople] = useShared<Person[]>(`parent.pickup.${child.id}`, [
-    { name: 'Imran Khan', relation: 'Father', cnic: '35202-1234567-1', locked: true },
-    { name: 'Sana Imran', relation: 'Mother', cnic: '35202-7654321-2', locked: true },
-    { name: 'Ali Raza', relation: 'Uncle', cnic: '35202-1234567-7' },
-  ]);
+  const q = useFamily('pickup', familyApi.pickup);
   const [name, setName] = useState('');
   const [relation, setRelation] = useState('');
   const [cnic, setCnic] = useState('');
-  const [photo, setPhoto] = useState(false);
-  const save = () => {
+  const save = useMutation(
+    (b: { name: string; relation: string; cnic: string }) => familyApi.savePickup(b, childId),
+    'Person saved',
+  );
+  const submit = async () => {
     const digits = cnic.replace(/\D/g, '');
     if (name.trim().length < 3) {
       toast(t('Enter the full name'));
@@ -423,52 +357,46 @@ export function ParentPickup(_: ScreenProps) {
       toast(t('Enter the relation'));
     } else if (digits.length !== 13) {
       toast(t('CNIC must have 13 digits'));
-    } else if (!photo) {
-      toast(t('Add a photo so the front desk can check'));
     } else {
       const formatted = `${digits.slice(0, 5)}-${digits.slice(5, 12)}-${digits.slice(12)}`;
-      setPeople(p => [...p, { name: name.trim(), relation: relation.trim(), cnic: formatted, photo }]);
-      setName('');
-      setRelation('');
-      setCnic('');
-      setPhoto(false);
-      toast(t('Person saved'));
+      const r = await save.run({ name: name.trim(), relation: relation.trim(), cnic: formatted });
+      if (r) {
+        q.setData(prev => [r, ...(prev ?? [])]);
+        setName('');
+        setRelation('');
+        setCnic('');
+      }
     }
   };
   return (
     <Screen
       title="Authorized pickup"
       subtitle={child.name}
-      footer={<Button label="Save person" onPress={save} />}
+      refreshing={q.refreshing}
+      onRefresh={q.refresh}
+      footer={<Button label="Save person" onPress={submit} loading={save.busy} />}
     >
-      <InfoBanner
-        icon={Shield}
-        text={`${t('The front desk checks the photo and CNIC before releasing')} ${first}.`}
-      />
-      <Card>
-        {people.map((p, i) => (
-          <ListRow
-            key={p.cnic}
-            title={p.name}
-            subtitle={`${t(p.relation)} · ${p.cnic}`}
-            right={
-              p.locked ? undefined : (
-                <Pressable
-                  hitSlop={10}
-                  onPress={() => {
-                    setPeople(list => list.filter(x => x.cnic !== p.cnic));
-                    toast(`${p.name} ${t('removed')}`);
-                  }}
-                >
-                  <X size={20} color={colors.text} />
-                </Pressable>
-              )
-            }
-            last={i === people.length - 1}
-            avatar={p.name}
-          />
-        ))}
-      </Card>
+      <InfoBanner icon={Shield} text={`${t('The front desk checks the photo and CNIC before releasing')} ${first}.`} />
+      <QueryView q={q}>
+        {list =>
+          list.length ? (
+            <Card>
+              {list.map((p, i) => (
+                <ListRow
+                  key={p.id}
+                  title={pName(p)}
+                  subtitle={`${t(pRelation(p))} · ${pCnic(p)}`}
+                  last={i === list.length - 1}
+                  avatar={pName(p) || '?'}
+                />
+              ))}
+            </Card>
+          ) : (
+            <Empty text="No pickup persons yet." />
+          )
+        }
+      </QueryView>
+      <NoApiBanner what={t('Removing a person and photos')} />
       <Card title="Add a person">
         <View style={s.form}>
           <Field label="Name" value={name} onChangeText={setName} placeholder={t('Full name')} />
@@ -477,20 +405,10 @@ export function ParentPickup(_: ScreenProps) {
               <Field value={relation} onChangeText={setRelation} placeholder={t('Relation')} />
             </View>
             <View style={s.flex}>
-              <Field
-                value={cnic}
-                onChangeText={setCnic}
-                placeholder="CNIC"
-                keyboardType="number-pad"
-                maxLength={15}
-              />
+              <Field value={cnic} onChangeText={setCnic} placeholder="CNIC" keyboardType="number-pad" maxLength={15} />
             </View>
           </View>
-          {photo ? (
-            <AttachChip name="pickup-photo.jpg" onRemove={() => setPhoto(false)} />
-          ) : (
-            <AddFile label="Add photo" onPress={() => setPhoto(true)} />
-          )}
+          <AddFile label="Add photo" />
         </View>
       </Card>
     </Screen>
@@ -499,79 +417,75 @@ export function ParentPickup(_: ScreenProps) {
 
 // ---------- Certificates (P29) ----------
 
-type CertReq = { childId: string; type: string; when: string; status: string };
-
 const CERTS = [
-  { key: 'Character certificate', sub: undefined },
-  { key: 'Bonafide certificate', sub: undefined },
-  { key: 'Leaving certificate', sub: 'After fee and library clearance' },
+  { key: 'character', label: 'Character certificate', sub: undefined },
+  { key: 'bonafide', label: 'Bonafide certificate', sub: undefined },
+  { key: 'leaving', label: 'Leaving certificate', sub: 'After fee and library clearance' },
 ];
 
 export function ParentCertificates(_: ScreenProps) {
   const { t } = useI18n();
-  const child = useCurrentChild();
-  const { due } = useChildFee(child);
-  const [type, setType] = useState(CERTS[0].key);
-  const [purpose, setPurpose] = useState('Visa application');
-  const [reqs, setReqs] = useShared<CertReq[]>('parent.certs', [
-    { childId: 'ayesha', type: 'Bonafide certificate', when: 'Requested 3 Sep', status: 'Ready to collect' },
-  ]);
-  const mine = reqs.filter(r => r.childId === child.id);
-  const send = () => {
+  const childId = useChildId();
+  const fees = useFees();
+  const due = fees.data?.dues ?? 0;
+  const q = useFamily('certs', familyApi.certificates);
+  const [kind, setKind] = useState(CERTS[0].key);
+  const [purpose, setPurpose] = useState('');
+  const req = useMutation((k: string) => familyApi.requestCertificate(k, childId), 'Request sent');
+  const send = async () => {
     if (!purpose.trim()) {
       toast(t('Write what the certificate is needed for'));
       return;
     }
-    if (type === 'Leaving certificate' && due > 0) {
+    if (kind === 'leaving' && due > 0) {
       toast(t('Clear the fee dues first for a leaving certificate'));
       return;
     }
-    setReqs(r => [{ childId: child.id, type, when: 'Requested 22 Oct', status: 'Requested' }, ...r]);
-    toast(t('Request sent'));
+    const r = await req.run(kind);
+    if (r) {
+      q.setData(prev => [r, ...(prev ?? [])]);
+      setPurpose('');
+    }
   };
+  const label = (k: string) => CERTS.find(c => c.key === k.toLowerCase())?.label ?? cap(k);
   return (
-    <Screen title="Request certificate">
+    <Screen title="Request certificate" refreshing={q.refreshing} onRefresh={q.refresh}>
       <Text style={s.label}>{t('Certificate')}</Text>
       <Card>
         {CERTS.map((c, i) => (
           <ListRow
             key={c.key}
             icon={File}
-            title={t(c.key)}
+            title={t(c.label)}
             subtitle={c.sub ? t(c.sub) : undefined}
-            right={<Toggle value={type === c.key} onChange={() => setType(c.key)} />}
-            onPress={() => setType(c.key)}
+            right={<Toggle value={kind === c.key} onChange={() => setKind(c.key)} />}
+            onPress={() => setKind(c.key)}
             last={i === CERTS.length - 1}
           />
         ))}
       </Card>
-      <Field label="Needed for" value={purpose} onChangeText={setPurpose} />
-      <InfoBanner
-        tone="warn"
-        icon={Banknote}
-        text={t('Fee Rs. 300 is added to the next voucher.')}
-      />
-      <Button label="Send request" onPress={send} />
-      <Card title="My requests">
-        {mine.length ? (
-          mine.map((r, i) => (
-            <ListRow
-              key={`${r.type}-${i}`}
-              title={t(r.type)}
-              subtitle={r.when}
-              right={
-                <Badge
-                  label={r.status}
-                  tone={r.status === 'Ready to collect' ? 'success' : 'warn'}
+      <Field label="Needed for" value={purpose} onChangeText={setPurpose} placeholder="Visa application" />
+      <InfoBanner tone="warn" icon={Banknote} text={t('A certificate fee may be added to the next voucher.')} />
+      <Button label="Send request" onPress={send} loading={req.busy} />
+      <QueryView q={q}>
+        {list => (
+          <Card title="My requests">
+            {list.length ? (
+              list.map((r, i) => (
+                <ListRow
+                  key={r.id}
+                  title={t(label(String(r.kind ?? r.title)))}
+                  subtitle={`${t('Requested')} ${fmtDate(r.recordDate)}`}
+                  right={<Badge label={cap(r.status)} tone={statusTone(r.status)} />}
+                  last={i === list.length - 1}
                 />
-              }
-              last={i === mine.length - 1}
-            />
-          ))
-        ) : (
-          <Text style={s.empty}>{t('No requests yet.')}</Text>
+              ))
+            ) : (
+              <Text style={s.empty}>{t('No requests yet.')}</Text>
+            )}
+          </Card>
         )}
-      </Card>
+      </QueryView>
     </Screen>
   );
 }
@@ -607,19 +521,6 @@ const s = StyleSheet.create({
   },
   dayOn: { backgroundColor: colors.primary, borderColor: colors.primary },
   dayText: { fontSize: 13, fontWeight: '800', color: colors.text },
-  replyRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  sendBtn: {
-    width: 48,
-    height: 48,
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  link: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: colors.primaryText,
-    textAlign: 'center',
-    marginTop: 12,
-  },
+  link: { fontSize: 13, fontWeight: '800', color: colors.primaryText, textAlign: 'center', marginTop: 12 },
   question: { fontSize: 14, fontWeight: '800', color: colors.text, marginBottom: 10 },
 });

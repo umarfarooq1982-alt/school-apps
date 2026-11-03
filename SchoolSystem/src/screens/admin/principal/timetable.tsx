@@ -1,4 +1,5 @@
-// M-05 Timetable builder with clash checks, workload, and daily substitutions.
+// M-05 Timetable builder (live /api/web/timetable), workload, and daily
+// substitutions (approved staff leave + "substitutions" module records).
 import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Bell, CalendarRange, History, Minus, Plus, Repeat, Send, UserX } from 'lucide-react-native';
@@ -18,65 +19,23 @@ import { adminStyles as a, FormSheet, ListScreen, PickerField, Table } from '../
 import { ScreenProps, useNav } from '../../../navigation';
 import { useShared } from '../../../store';
 import { logAudit } from '../../../data/admin';
-import {
-  ABSENT_TEACHERS,
-  ALLOCATION,
-  BELL_SCHEDULES,
-  BellPeriod,
-  FREE_TEACHERS,
-  Slot,
-  SUB_HISTORY,
-  SubRecord,
-  TIMETABLE_SEED,
-  TimetableMap,
-  TT_CLASSES,
-  TT_DAYS,
-  TT_PERIODS,
-  TT_SUBJECTS,
-  TT_TEACHERS,
-  WORKLOAD_LIMIT,
-} from '../../../data/admin-principal';
+import { ALLOCATION, BELL_SCHEDULES, BellPeriod, WORKLOAD_LIMIT } from '../../../data/admin-principal';
+import { useApi, useMutation } from '../../../api/hooks';
+import { field, ModuleRow, webA, WebTimetable } from '../../../api/webA';
+import { errorMessage } from '../../../api/client';
+import { Loading, NoApiBanner, QueryView } from '../../../components/states';
 import { colors, radius } from '../../../theme';
-import { localId, ReadOnlyBanner, useGuard } from '../owner/shared';
+import { ReadOnlyBanner, useGuard } from '../owner/shared';
 
-export const useTimetable = () => useShared<TimetableMap>('admin.timetable', TIMETABLE_SEED);
-
-const key = (c: string, d: string, p: string) => `${c}|${d}|${p}`;
 const short = (s: string) => (s === 'Social Studies' ? 'SST' : s === 'Mathematics' ? 'Math' : s.slice(0, 4));
-const initials = (n: string) => n.split(' ').map(x => x[0]).join('');
+const initials = (n: string) => n.replace(/\(.*\)/, '').trim().split(' ').map(x => x[0]).join('');
 
-// A teacher (or room) cannot be in two classes in the same period.
-export function findClash(map: TimetableMap, cls: string, day: string, period: string, slot: Slot) {
-  for (const c of TT_CLASSES) {
-    if (c === cls) {
-      continue;
-    }
-    const other = map[key(c, day, period)];
-    if (!other) {
-      continue;
-    }
-    if (other.teacher === slot.teacher) {
-      return `${slot.teacher} already teaches ${c} in ${period} on ${day}.`;
-    }
-    if (other.room === slot.room) {
-      return `Room ${slot.room} is used by ${c} in ${period} on ${day}.`;
-    }
-  }
-  return null;
-}
+type ClassSection = { classId: string; section: string; label: string };
 
-function workload(map: TimetableMap) {
-  const w: Record<string, { week: number; days: Record<string, number> }> = {};
-  TT_TEACHERS.forEach(t => {
-    w[t] = { week: 0, days: Object.fromEntries(TT_DAYS.map(d => [d, 0])) };
-  });
-  Object.entries(map).forEach(([k, slot]) => {
-    const day = k.split('|')[1];
-    const t = (w[slot.teacher] ??= { week: 0, days: Object.fromEntries(TT_DAYS.map(d => [d, 0])) });
-    t.week += 1;
-    t.days[day] += 1;
-  });
-  return w;
+// Every class-section of the selected campus, from /api/web/context.
+function useClassSections(): ClassSection[] {
+  const ctx = useApi('adm:context', webA.context);
+  return (ctx.data?.classes ?? []).flatMap(c => c.sections.map(s => ({ classId: c.id, section: s, label: `${c.name}-${s}` })));
 }
 
 export function AdminTimetableBuilder(_: ScreenProps) {
@@ -93,79 +52,110 @@ export function AdminTimetableBuilder(_: ScreenProps) {
   );
 }
 
+function useClassPick() {
+  const list = useClassSections();
+  const [label, setLabel] = useShared('adm.ttClass', '');
+  const cur = list.find(c => c.label === label) ?? list[0];
+  return { list, cur, setLabel };
+}
+
+function useClassTimetable(cur?: ClassSection) {
+  return useApi(cur ? `adm:tt:${cur.classId}:${cur.section}` : null, () => webA.timetable(cur?.classId ?? '', cur?.section ?? 'A'));
+}
+
 function Builder() {
-  const [map, setMap] = useTimetable();
-  const [published, setPublished] = useShared('admin.ttPublished', 'Published 1 Oct');
+  const { list, cur, setLabel } = useClassPick();
+  const q = useClassTimetable(cur);
   const { guard, ro } = useGuard();
-  const [cls, setCls] = useState(TT_CLASSES[0]);
-  const [edit, setEdit] = useState<{ day: string; period: string; slot: Slot } | null>(null);
+  const [edit, setEdit] = useState<{ day: string; period: number; subjectId: number | null; staffId: number | null } | null>(null);
   const [error, setError] = useState('');
-  const save = () => {
-    if (!edit) {
+  const [busy, setBusy] = useState(false);
+  const tt = q.data;
+  const subjectName = (id: number | null) => tt?.subjects.find(s => s.id === id)?.name ?? '';
+  const staffName = (id: number | null) => tt?.staff.find(s => s.id === id)?.name ?? '';
+  const save = async () => {
+    if (!edit || !cur || busy) {
       return;
     }
-    const clash = findClash(map, cls, edit.day, edit.period, edit.slot);
-    if (clash) {
-      setError(clash);
+    if (!edit.subjectId) {
+      setError('Choose a subject');
       return;
     }
-    setMap(m => ({ ...m, [key(cls, edit.day, edit.period)]: edit.slot }));
-    logAudit('Timetable', `${cls} ${edit.day} ${edit.period}: ${edit.slot.subject} · ${edit.slot.teacher} · ${edit.slot.room}`);
-    setPublished('Changes not published');
-    setEdit(null);
+    setBusy(true);
+    try {
+      await webA.saveSlot({ classId: cur.classId, section: cur.section, day: edit.day, period: edit.period, subjectId: edit.subjectId, staffId: edit.staffId ?? undefined });
+      logAudit('Timetable', `${cur.label} ${edit.day} P${edit.period}: ${subjectName(edit.subjectId)} · ${staffName(edit.staffId)}`);
+      setEdit(null);
+      q.refresh();
+    } catch (e) {
+      // The server refuses a teacher placed in two classes in the same period.
+      setError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
   };
+  if (!cur) {
+    return <Loading />;
+  }
   return (
     <>
-      <PickerField label="Class" value={cls} options={TT_CLASSES} onChange={setCls} />
-      <Card>
-        <View style={s.ttRow}>
-          <View style={s.ttHead} />
-          {TT_DAYS.map(d => (
-            <Text key={d} style={s.ttDay}>{d}</Text>
-          ))}
-        </View>
-        {TT_PERIODS.map(p => (
-          <View key={p} style={s.ttRow}>
-            <Text style={s.ttHead}>{p}</Text>
-            {TT_DAYS.map(d => {
-              const slot = map[key(cls, d, p)];
-              return (
-                <Pressable
-                  key={d}
-                  style={s.ttCell}
-                  onPress={() => {
-                    if (ro) {
-                      toast('This session is closed and read-only.');
-                      return;
-                    }
-                    setError('');
-                    setEdit({ day: d, period: p, slot: slot ?? { subject: TT_SUBJECTS[0], teacher: TT_TEACHERS[0], room: 'R105' } });
-                  }}
-                >
-                  <Text style={s.ttSub} numberOfLines={1}>{slot ? short(slot.subject) : '—'}</Text>
-                  <Text style={s.ttTeacher} numberOfLines={1}>{slot ? initials(slot.teacher) : ''}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        ))}
-      </Card>
-      <InfoBanner text={`Tap a slot to set subject, teacher and room. A teacher or room can never be in two classes in the same period. ${published}.`} />
-      <Button
-        label="Publish to teacher and parent apps"
-        icon={Send}
-        onPress={guard(() => {
-          setPublished('Published today');
-          logAudit('Timetable', 'Timetable published to portals');
-          toast('Timetable published. Teachers and parents are notified.');
-        })}
-      />
-      {edit ? (
-        <FormSheet visible onClose={() => setEdit(null)} title={`${cls} · ${edit.day} ${edit.period}`} onSubmit={save}>
-          <PickerField label="Subject" value={edit.slot.subject} options={TT_SUBJECTS} onChange={v => { setError(''); setEdit({ ...edit, slot: { ...edit.slot, subject: v } }); }} />
-          <PickerField label="Teacher" value={edit.slot.teacher} options={TT_TEACHERS} onChange={v => { setError(''); setEdit({ ...edit, slot: { ...edit.slot, teacher: v } }); }} />
-          <Field label="Room" value={edit.slot.room} onChangeText={v => { setError(''); setEdit({ ...edit, slot: { ...edit.slot, room: v } }); }} />
-          {error ? <InfoBanner tone="danger" text={`Clash: ${error}`} /> : null}
+      <PickerField label="Class" value={cur.label} options={list.map(c => c.label)} onChange={setLabel} />
+      <QueryView q={q}>
+        {d => (
+          <Card>
+            <View style={s.ttRow}>
+              <View style={s.ttHead} />
+              {d.days.map(day => (
+                <Text key={day} style={s.ttDay}>{day}</Text>
+              ))}
+            </View>
+            {d.periods.map(p => (
+              <View key={p} style={s.ttRow}>
+                <Text style={s.ttHead}>P{p}</Text>
+                {d.days.map(day => {
+                  const slot = d.slots.find(x => x.day === day && x.period === p);
+                  return (
+                    <Pressable
+                      key={day}
+                      style={s.ttCell}
+                      onPress={() => {
+                        if (ro) {
+                          toast('This session is closed and read-only.');
+                          return;
+                        }
+                        setError('');
+                        setEdit({ day, period: p, subjectId: slot?.subjectId ?? d.subjects[0]?.id ?? null, staffId: slot?.staffId ?? null });
+                      }}
+                    >
+                      <Text style={s.ttSub} numberOfLines={1}>{slot ? short(subjectName(slot.subjectId)) : '—'}</Text>
+                      <Text style={s.ttTeacher} numberOfLines={1}>{slot ? initials(staffName(slot.staffId)) : ''}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ))}
+          </Card>
+        )}
+      </QueryView>
+      <InfoBanner text="Tap a slot to set subject and teacher. The server refuses a teacher in two classes in the same period. Saved slots show in the teacher and parent apps at once." />
+      <Button label="Publish to teacher and parent apps" icon={Send} onPress={guard(() => toast('Saved slots are already live in the apps.'))} />
+      {edit && tt ? (
+        <FormSheet visible onClose={() => setEdit(null)} title={`${cur.label} · ${edit.day} P${edit.period}`} onSubmit={save} submitLabel={busy ? 'Saving…' : 'Save'}>
+          <PickerField
+            label="Subject"
+            value={subjectName(edit.subjectId)}
+            options={tt.subjects.map(x => x.name)}
+            onChange={v => { setError(''); setEdit({ ...edit, subjectId: tt.subjects.find(x => x.name === v)?.id ?? null }); }}
+          />
+          <PickerField
+            label="Teacher"
+            value={staffName(edit.staffId)}
+            options={tt.staff.map(x => x.name)}
+            onChange={v => { setError(''); setEdit({ ...edit, staffId: tt.staff.find(x => x.name === v)?.id ?? null }); }}
+          />
+          {tt.subjects.length === 0 ? <InfoBanner tone="warn" text="Add subjects in Academic setup first." /> : null}
+          <Text style={a.small}>Rooms are not stored by the server yet.</Text>
+          {error ? <InfoBanner tone="danger" text={`Not saved: ${error}`} /> : null}
         </FormSheet>
       ) : null}
     </>
@@ -181,6 +171,7 @@ function Bells() {
     ro ? toast('This session is closed and read-only.') : setBells(b => ({ ...b, [which]: b[which].map((p, j) => (j === i ? { ...p, time } : p)) }));
   return (
     <>
+      <NoApiBanner what="Bell schedules" />
       <Segmented options={Object.keys(bells)} value={which} onChange={setWhich} />
       <Card>
         {list.map((p, i) => (
@@ -198,28 +189,36 @@ function Bells() {
         icon={Plus}
         onPress={guard(() => setBells(b => ({ ...b, [which]: [...b[which], { label: `P${b[which].filter(x => !x.isBreak).length + 1}`, time: '12:20 – 1:00' }] })))}
       />
-      <Button label="Save bell schedule" onPress={guard(() => { logAudit('Bell schedule', `${which} schedule saved (${list.length} rows)`); toast('Bell schedule saved'); })} />
+      <Button label="Save bell schedule" onPress={guard(() => { logAudit('Bell schedule', `${which} schedule saved (${list.length} rows)`); toast('Bell schedule saved on this phone'); })} />
     </>
   );
 }
 
 function Allocation() {
   const [alloc, setAlloc] = useShared<Record<string, number>>('admin.allocation', ALLOCATION);
-  const [map] = useTimetable();
+  const { list, cur, setLabel } = useClassPick();
+  const q = useClassTimetable(cur);
   const { guard } = useGuard();
-  const [cls, setCls] = useState(TT_CLASSES[0]);
-  const placed = (subj: string) => TT_DAYS.reduce((n, d) => n + TT_PERIODS.filter(p => map[key(cls, d, p)]?.subject === subj).length, 0);
-  const total = Object.values(alloc).reduce((x, y) => x + y, 0);
+  const tt = q.data;
+  const subjects = tt?.subjects.map(x => x.name) ?? [];
+  const placed = (name: string) => {
+    const id = tt?.subjects.find(x => x.name === name)?.id;
+    return (tt?.slots ?? []).filter(x => x.subjectId === id).length;
+  };
+  const week = (tt?.days.length ?? 5) * (tt?.periods.length ?? 8);
+  const total = subjects.reduce((n, x) => n + (alloc[x] ?? 0), 0);
   const change = (subj: string, by: number) =>
     guard(() => {
       setAlloc(al => ({ ...al, [subj]: Math.max(0, (al[subj] ?? 0) + by) }));
-      logAudit('Period allocation', `${subj}: ${alloc[subj]} → ${Math.max(0, alloc[subj] + by)} per week`);
+      logAudit('Period allocation', `${subj}: ${alloc[subj] ?? 0} → ${Math.max(0, (alloc[subj] ?? 0) + by)} per week`);
     })();
   return (
     <>
-      <PickerField label="Class" value={cls} options={TT_CLASSES} onChange={setCls} />
-      <Card title={`Periods per week · ${total} of ${TT_DAYS.length * TT_PERIODS.length}`}>
-        {TT_SUBJECTS.map((subj, i) => {
+      <NoApiBanner what="Periods per week per subject (the count in the timetable is live)" />
+      {cur ? <PickerField label="Class" value={cur.label} options={list.map(c => c.label)} onChange={setLabel} /> : null}
+      <Card title={`Periods per week · ${total} of ${week}`}>
+        {subjects.length === 0 ? <Text style={a.small}>{q.loading ? 'Loading…' : 'No subjects yet.'}</Text> : null}
+        {subjects.map((subj, i) => {
           const got = placed(subj);
           const want = alloc[subj] ?? 0;
           return (
@@ -235,96 +234,144 @@ function Allocation() {
                   <IconButton icon={Plus} onPress={() => change(subj, 1)} />
                 </View>
               }
-              last={i === TT_SUBJECTS.length - 1}
+              last={i === subjects.length - 1}
             />
           );
         })}
       </Card>
-      {total > TT_DAYS.length * TT_PERIODS.length ? <InfoBanner tone="danger" text="More periods allocated than the week has." /> : null}
+      {total > week ? <InfoBanner tone="danger" text="More periods allocated than the week has." /> : null}
     </>
   );
 }
 
+// Loads every class timetable once and counts each teacher's periods.
 function Workload() {
-  const [map] = useTimetable();
-  const w = useMemo(() => workload(map), [map]);
-  const rows = Object.entries(w).map(([t, v]) => [
+  const list = useClassSections();
+  const q = useApi(list.length ? `adm:tt:all:${list.length}` : null, async () => {
+    const out: WebTimetable[] = [];
+    for (const c of list) {
+      out.push(await webA.timetable(c.classId, c.section));
+    }
+    return out;
+  });
+  const w = useMemo(() => {
+    const res: Record<string, { week: number; days: Record<string, number> }> = {};
+    const days = q.data?.[0]?.days ?? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    (q.data ?? []).forEach(tt =>
+      tt.slots.forEach(slot => {
+        const name = tt.staff.find(x => x.id === slot.staffId)?.name;
+        if (!name) {
+          return;
+        }
+        const t = (res[name] ??= { week: 0, days: Object.fromEntries(days.map(d => [d, 0])) });
+        t.week += 1;
+        t.days[slot.day] = (t.days[slot.day] ?? 0) + 1;
+      }),
+    );
+    return { res, days };
+  }, [q.data]);
+  const rows = Object.entries(w.res).map(([t, v]) => [
     t,
     `${v.week}${v.week > WORKLOAD_LIMIT.perWeek ? ' ⚠' : ''}`,
-    ...TT_DAYS.map(d => `${v.days[d]}${v.days[d] > WORKLOAD_LIMIT.perDay ? ' ⚠' : ''}`),
+    ...w.days.map(d => `${v.days[d] ?? 0}${(v.days[d] ?? 0) > WORKLOAD_LIMIT.perDay ? ' ⚠' : ''}`),
   ]);
-  const over = Object.values(w).filter(v => v.week > WORKLOAD_LIMIT.perWeek || TT_DAYS.some(d => v.days[d] > WORKLOAD_LIMIT.perDay)).length;
+  const over = Object.values(w.res).filter(v => v.week > WORKLOAD_LIMIT.perWeek || w.days.some(d => (v.days[d] ?? 0) > WORKLOAD_LIMIT.perDay)).length;
   return (
     <>
       <InfoBanner
         tone={over ? 'danger' : 'info'}
         text={`Limits: ${WORKLOAD_LIMIT.perDay} periods a day, ${WORKLOAD_LIMIT.perWeek} a week. ${over ? `${over} teacher(s) over the limit (⚠).` : 'Everyone is within the limits.'}`}
       />
-      <Card>
-        <Table columns={['Teacher', 'Week', ...TT_DAYS]} rows={rows} />
-      </Card>
+      <QueryView q={q} isEmpty={() => rows.length === 0} emptyText="No periods assigned to teachers yet.">
+        {() => (
+          <Card>
+            <Table columns={['Teacher', 'Week', ...w.days]} rows={rows} />
+          </Card>
+        )}
+      </QueryView>
     </>
   );
 }
 
 // ---------- Substitutions ----------
 
-type Assignment = Record<string, string>; // `${absentId}|${period}` -> substitute
+const todayIso = () => new Date().toISOString().slice(0, 10);
 
 export function AdminSubstitutions(_: ScreenProps) {
   const nav = useNav();
-  const [assigned, setAssigned] = useShared<Assignment>('admin.subAssigned', {});
-  const [, setHistory] = useShared<SubRecord[]>('admin.subHistory', SUB_HISTORY);
+  const leave = useApi('adm:leave', webA.leave);
+  const subs = useApi('adm:mod:substitutions', () => webA.modules('substitutions'));
+  const staff = useApi('adm:staff:all', webA.staff);
   const { guard } = useGuard();
-  const [pick, setPick] = useState<{ id: string; name: string; period: string; cls: string } | null>(null);
-  const rows = ABSENT_TEACHERS.flatMap(t => t.periods.map(p => ({ id: `${t.id}|${p.period}`, teacher: t.name, reason: t.reason, ...p })));
-  const open = rows.filter(r => !assigned[r.id]).length;
-  const assign = (sub: string) => {
+  const [pick, setPick] = useState<{ name: string } | null>(null);
+  const [period, setPeriod] = useState('P1');
+  const [cls, setCls] = useState('');
+  const classes = useClassSections();
+  const today = todayIso();
+  // Approved staff leave covering today = absent teachers.
+  const absent = (leave.data?.items ?? []).filter(l => l.kind === 'staff' && l.status === 'approved' && l.from <= today && l.to >= today);
+  const todays = (subs.data ?? []).filter(r => field(r, 'date', 'recordDate') === today);
+  const free = (staff.data ?? []).filter(x => !absent.some(l => l.name === x.name));
+  const add = useMutation((b: Record<string, unknown>) => webA.addModule('substitutions', b), 'Substitute assigned and notified');
+  const assign = async (sub: string) => {
     if (!pick) {
       return;
     }
-    const busy = Object.entries(assigned).some(([k, v]) => v === sub && k.endsWith(`|${pick.period}`));
-    if (busy) {
-      toast(`${sub} is already covering another class in ${pick.period}`);
+    if (!cls) {
+      toast('Choose the class');
       return;
     }
-    setAssigned(x => ({ ...x, [pick.id]: sub }));
-    setHistory(h => [{ id: localId('sh'), date: 'Today', absent: pick.name, period: pick.period, cls: pick.cls, substitute: sub }, ...h]);
-    logAudit('Substitution', `${pick.cls} ${pick.period}: ${pick.name} → ${sub}`);
-    toast(`${sub} assigned and notified`);
-    setPick(null);
+    if (todays.some(r => field(r, 'substitute') === sub && field(r, 'period') === period)) {
+      toast(`${sub} is already covering another class in ${period}`);
+      return;
+    }
+    const res = await add.run({ title: `${cls} ${period}`, status: 'assigned', date: today, absent: pick.name, period, cls, substitute: sub });
+    if (res !== undefined) {
+      logAudit('Substitution', `${cls} ${period}: ${pick.name} → ${sub}`);
+      subs.refresh();
+      setPick(null);
+    }
   };
   return (
     <>
       <ListScreen
         title="Substitutions"
-        subtitle={`Thursday 22 Oct · ${ABSENT_TEACHERS.length} teachers absent · ${open} periods open`}
-        items={rows}
+        subtitle={`${today} · ${absent.length} teachers on leave · ${todays.length} periods covered`}
+        items={absent}
         keyOf={r => r.id}
-        searchText={r => `${r.teacher} ${r.cls} ${r.subject}`}
-        filters={[{ label: 'Status', options: ['All', 'Open', 'Covered'], get: r => (assigned[r.id] ? 'Covered' : 'Open') }]}
+        searchText={r => `${r.name} ${r.reason ?? ''}`}
+        empty={leave.loading ? 'Loading…' : 'No teacher is on approved leave today'}
         header={
           <>
             <ReadOnlyBanner />
-            <InfoBanner icon={UserX} text="Approved teacher leave appears here automatically. Suggested teachers are free in that period." />
+            {leave.error ? <InfoBanner tone="danger" text={leave.error} /> : null}
+            <InfoBanner icon={UserX} text="Approved teacher leave appears here automatically. Pick the class and period, then a free teacher." />
             <Button label="Substitution record" variant="outline" icon={History} onPress={() => nav.push('AdminSubHistory')} />
           </>
         }
         renderItem={(r, last) => (
           <ListRow
             icon={Repeat}
-            title={`${r.period} · ${r.cls} · ${r.subject}`}
-            subtitle={`${r.teacher} (${r.reason})${assigned[r.id] ? `\nCovered by ${assigned[r.id]}` : ''}`}
-            right={assigned[r.id] ? <Badge label="Covered" tone="success" /> : <Badge label="Assign" tone="warn" />}
-            onPress={guard(() => setPick({ id: r.id, name: r.teacher, period: r.period, cls: r.cls }))}
+            title={r.name}
+            subtitle={`${r.type} leave · ${r.from} – ${r.to}${r.reason ? ` · ${r.reason}` : ''}`}
+            right={<Badge label="Assign" tone="warn" />}
+            onPress={guard(() => setPick({ name: r.name }))}
             last={last}
           />
         )}
       />
-      <FormSheet visible={!!pick} onClose={() => setPick(null)} title={pick ? `${pick.cls} · ${pick.period}` : ''} submitLabel="Notify all substitutes" onSubmit={() => { toast('Substitutes notified by push and SMS'); setPick(null); }}>
-        <Text style={a.small}>Suggested free teachers</Text>
-        {(pick ? FREE_TEACHERS[pick.period] ?? [] : []).map(t => (
-          <ListRow key={t} icon={Bell} title={t} subtitle="Free in this period" right={<Badge label="Assign" tone="primary" />} onPress={() => assign(t)} />
+      <FormSheet
+        visible={!!pick}
+        onClose={() => setPick(null)}
+        title={pick ? `Cover for ${pick.name}` : ''}
+        submitLabel="Close"
+        onSubmit={() => setPick(null)}
+      >
+        <PickerField label="Class" value={cls} options={classes.map(c => c.label)} onChange={setCls} />
+        <PickerField label="Period" value={period} options={['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8']} onChange={setPeriod} />
+        <Text style={a.small}>Teachers not on leave today</Text>
+        {free.map(t => (
+          <ListRow key={t.id} icon={Bell} title={t.name} subtitle={t.designation ?? 'Staff'} right={<Badge label="Assign" tone="primary" />} onPress={() => assign(t.name)} />
         ))}
       </FormSheet>
     </>
@@ -332,16 +379,24 @@ export function AdminSubstitutions(_: ScreenProps) {
 }
 
 export function AdminSubHistory(_: ScreenProps) {
-  const [list] = useShared<SubRecord[]>('admin.subHistory', SUB_HISTORY);
+  const q = useApi('adm:mod:substitutions', () => webA.modules('substitutions'));
+  const list = (q.data ?? []) as ModuleRow[];
+  const dates = Array.from(new Set(list.map(r => field(r, 'date', 'recordDate'))));
   return (
     <ListScreen
       title="Substitution record"
       items={list}
-      keyOf={r => r.id}
-      searchText={r => `${r.absent} ${r.substitute} ${r.cls}`}
-      filters={[{ label: 'Date', options: ['All', ...Array.from(new Set(list.map(r => r.date)))], get: r => r.date }]}
+      keyOf={r => String(r.id)}
+      searchText={r => `${field(r, 'absent')} ${field(r, 'substitute')} ${field(r, 'cls')}`}
+      filters={[{ label: 'Date', options: ['All', ...dates], get: r => field(r, 'date', 'recordDate') }]}
+      empty={q.loading ? 'Loading…' : q.error ?? 'No substitutions recorded'}
       renderItem={(r, last) => (
-        <ListRow icon={CalendarRange} title={`${r.date} · ${r.period} · ${r.cls}`} subtitle={`${r.absent} → ${r.substitute}`} last={last} />
+        <ListRow
+          icon={CalendarRange}
+          title={`${field(r, 'date', 'recordDate')} · ${field(r, 'period')} · ${field(r, 'cls')}`}
+          subtitle={`${field(r, 'absent')} → ${field(r, 'substitute')}`}
+          last={last}
+        />
       )}
     />
   );

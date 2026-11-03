@@ -1,7 +1,25 @@
 // Dummy data and shared state for the Front Desk / Admission panel
 // (SOW 3.2 C: M-02, S-03, S-05, S-10).
 import { getShared, setShared, useShared } from '../store';
-import { ADMIN_STUDENTS, AdminStudent, CAMPUSES } from './admin';
+import { AdminStudent, CAMPUSES, CLASSES } from './admin';
+import { useApi } from '../api/hooks';
+import { field, webA, WebStudent } from '../api/webA';
+import { useModuleList } from '../screens/admin/owner/shared';
+import { getSession } from '../api/session';
+
+// ---------- Live classes (names <-> ids) ----------
+
+export function useLiveClasses() {
+  const q = useApi('adm:academic', webA.academic);
+  const classes = q.data?.classes ?? [];
+  const names = classes.length ? classes.map(c => c.name) : CLASSES;
+  return {
+    names,
+    classes,
+    idOf: (name: string) => classes.find(c => c.name === name)?.id,
+    nameOf: (id: unknown) => classes.find(c => String(c.id) === String(id))?.name ?? (id ? `Class #${id}` : '—'),
+  };
+}
 
 // ---------- Inquiries (S-03) ----------
 
@@ -22,33 +40,64 @@ export type Inquiry = {
 };
 
 export const FRONT_STAFF = ['Saba Noreen', 'Hina Tariq', 'Adeel Khan'];
-export const FOLLOW_UP_DATES = ['Today', 'Tomorrow', 'Sat 24 Oct', 'Mon 26 Oct', 'Wed 28 Oct', 'Sat 31 Oct'];
+export const FOLLOW_UP_DATES = ['Today', 'Tomorrow', 'In 2 days', 'In 3 days', 'Next week'];
 export const SOURCES: InquirySource[] = ['Walk-in', 'Call', 'Website', 'Facebook'];
 export const INQUIRY_STATUSES: InquiryStatus[] = ['New', 'Contacted', 'Visited', 'Registered', 'Lost'];
 
-const CHILD_NAMES = ['Rayan Malik', 'Areeba Hashmi', 'Taha Qureshi', 'Eman Butt', 'Saad Mirza', 'Noor Sheikh', 'Umar Chaudhry', 'Hafsa Raza', 'Zain Javed', 'Alishba Tariq', 'Danish Ali', 'Maryam Saleem', 'Faizan Noor', 'Iqra Malik'];
-const INQ_CLASSES = ['Playgroup', 'Nursery', 'Prep', 'Class 1', 'Class 3', 'Class 5', 'Class 6'];
-
-const INQUIRIES_SEED: Inquiry[] = CHILD_NAMES.map((child, i) => ({
-  id: `inq${i + 1}`,
-  child,
-  parent: `${['Asif', 'Naveed', 'Shahid', 'Rizwan', 'Kamran', 'Fahad', 'Babar'][i % 7]} ${child.split(' ')[1]}`,
-  mobile: `03${String(10 + i * 3).padStart(2, '0')} ${String(2200000 + i * 7311).slice(0, 7)}`,
-  cls: INQ_CLASSES[i % INQ_CLASSES.length],
-  source: SOURCES[i % 4],
-  status: INQUIRY_STATUSES[i % 9 === 8 ? 4 : i % 5 === 4 ? 3 : i % 3],
-  followUp: FOLLOW_UP_DATES[i % FOLLOW_UP_DATES.length],
-  assigned: FRONT_STAFF[i % 3],
-  notes: i % 2 ? 'Asked about transport and fee structure.' : 'Wants campus visit with the child.',
-}));
-
-export const useInquiries = () => useShared<Inquiry[]>('fd.inquiries', INQUIRIES_SEED);
+// /api/web/modules/inquiries (Inquiry model). The server has no follow-up or
+// assigned-staff fields, so those two stay in this app.
+export function useInquiries() {
+  const cls = useLiveClasses();
+  const [extra, setExtra] = useShared<Record<string, { followUp?: string; assigned?: string }>>('fd.inqExtra', {});
+  const [list, setList, q] = useModuleList<Inquiry>(
+    'inquiries',
+    r => {
+      const id = String(r.id);
+      const source = field(r, 'source').toLowerCase();
+      const status = field(r, 'status').toLowerCase();
+      return {
+        id,
+        child: field(r, 'child_name', 'childName'),
+        parent: field(r, 'parent_name', 'parentName'),
+        mobile: field(r, 'mobile'),
+        cls: cls.nameOf(r.class_id ?? r.classId),
+        source: SOURCES.find(x => x.toLowerCase() === source) ?? 'Walk-in',
+        status: INQUIRY_STATUSES.find(x => x.toLowerCase() === status) ?? 'New',
+        followUp: extra[id]?.followUp ?? 'Tomorrow',
+        assigned: extra[id]?.assigned ?? FRONT_STAFF[0],
+        notes: field(r, 'notes'),
+      };
+    },
+    // The update replaces every field, so the full record is always sent.
+    i => ({
+      childName: i.child,
+      parentName: i.parent || null,
+      mobile: i.mobile,
+      classId: cls.idOf(i.cls) ? Number(cls.idOf(i.cls)) : null,
+      source: i.source,
+      status: i.status.toLowerCase(),
+      notes: i.notes || null,
+    }),
+  );
+  const set = (fn: Inquiry[] | ((l: Inquiry[]) => Inquiry[])) => {
+    const next = typeof fn === 'function' ? fn(list) : fn;
+    next.forEach(i => {
+      const old = list.find(o => o.id === i.id);
+      if (!old || old.followUp !== i.followUp || old.assigned !== i.assigned) {
+        setExtra(m => ({ ...m, [i.id]: { followUp: i.followUp, assigned: i.assigned } }));
+      }
+    });
+    setList(next);
+  };
+  return [list, set, q] as const;
+}
 
 // ---------- Registrations and entry test (M-02) ----------
 
 export type Decision = 'Pending' | 'Selected' | 'Waiting' | 'Rejected';
 
 export type Registration = {
+  id: string;
   regNo: string;
   name: string;
   gender: 'M' | 'F';
@@ -59,8 +108,12 @@ export type Registration = {
   mobile: string;
   prevSchool: string;
   cls: string;
+  classId: string;
   campus: string;
   feePaid: boolean;
+  feeAmount: number;
+  principal: string;
+  status: string;
   testId?: string;
   marks?: Record<string, number>;
   interview?: string;
@@ -69,76 +122,102 @@ export type Registration = {
 };
 
 export type Admission = {
-  approvalId: string;
   section: string;
   gr?: string;
-  roll?: number;
-  feeVoucher?: string;
   feePaid: boolean;
-  logins?: { parent: string; student: string; siblings: number };
+  logins?: { parent: string; student: string; parentPassword?: string; studentPassword?: string };
   final: boolean;
 };
 
-export const REG_FEE = 2500;
+export const REG_FEE = 1500;
 export const ADMISSION_FEE = 15000;
 export const TEST_SUBJECTS = ['English', 'Mathematics', 'Urdu'];
 export const TEST_MAX = 50;
 
-const REG_SEED: Registration[] = [
-  ['Rayan Malik', 'M', 'Class 3', [44, 41, 38], 'Confident, reads well', 'Selected'],
-  ['Areeba Hashmi', 'F', 'Class 3', [39, 45, 40], 'Shy but strong in maths', 'Selected'],
-  ['Taha Qureshi', 'M', 'Class 3', [30, 28, 35], 'Needs support in English', 'Waiting'],
-  ['Eman Butt', 'F', 'Class 3', [44, 41, 38], 'Excellent manners', 'Pending'],
-  ['Saad Mirza', 'M', 'Class 3', [18, 22, 25], 'Weak basics', 'Rejected'],
-  ['Noor Sheikh', 'F', 'Class 1', [40, 46, 42], '', 'Pending'],
-  ['Umar Chaudhry', 'M', 'Class 1', [35, 33, 38], '', 'Pending'],
-  ['Hafsa Raza', 'F', 'Class 6', [], '', 'Pending'],
-].map(([name, gender, cls, marks, interview, decision], i) => {
-  const m = marks as number[];
-  return {
-    regNo: `REG-26-${String(301 + i).padStart(4, '0')}`,
-    name: name as string,
-    gender: gender as 'M' | 'F',
-    dob: `${(i % 27) + 1} ${['Jan', 'Mar', 'May', 'Aug'][i % 4]} ${cls === 'Class 1' ? 2020 : cls === 'Class 6' ? 2015 : 2018}`,
-    bForm: `35202-${String(8800000 + i * 1371).slice(0, 7)}-${(i % 8) + 1}`,
-    father: `${['Asif', 'Naveed', 'Shahid', 'Rizwan', 'Kamran', 'Fahad', 'Babar', 'Tahir'][i]} ${(name as string).split(' ')[1]}`,
-    fatherCnic: `35202-${String(4400000 + i * 2213).slice(0, 7)}-${(i % 9) + 1}`,
-    mobile: `0321 ${String(5550000 + i * 911).slice(0, 7)}`,
-    prevSchool: ['Beaconhouse', 'City School', 'Allied School', 'Home schooled'][i % 4],
-    cls: cls as string,
-    campus: 'main',
-    feePaid: i !== 7,
-    testId: m.length ? (cls === 'Class 1' ? 't2' : 't1') : undefined,
-    marks: m.length ? Object.fromEntries(TEST_SUBJECTS.map((s, j) => [s, m[j]])) : undefined,
-    interview: interview as string,
-    decision: decision as Decision,
-  };
-});
+const DECISION_FROM: Record<string, Decision> = { selected: 'Selected', accepted: 'Selected', waiting: 'Waiting', rejected: 'Rejected' };
 
-export const useRegistrations = () => useShared<Registration[]>('fd.registrations', REG_SEED);
+// What the server does not return (previous school, campus, interview
+// remarks, section choice, fee mark) is kept per registration in this app.
+type RegExtra = Partial<Pick<Registration, 'prevSchool' | 'campus' | 'interview' | 'marks' | 'testId' | 'admission'>> & { feePaid?: boolean };
 
-let regSeq = 309;
-export function nextRegNo() {
-  regSeq += 1;
-  return `REG-26-${String(regSeq).padStart(4, '0')}`;
+export function useRegistrations() {
+  const q = useApi('adm:registrations', webA.registrations);
+  const [extra, setExtra] = useShared<Record<string, RegExtra>>('fd.regExtra', {});
+  const list: Registration[] = (q.data ?? []).map(r => {
+    const x = extra[r.regNo] ?? {};
+    const admitted = r.status === 'admitted';
+    return {
+      id: String(r.id),
+      regNo: r.regNo,
+      name: r.name,
+      gender: r.gender === 'F' || r.gender === 'Female' ? 'F' : 'M',
+      dob: r.dob ?? '',
+      bForm: r.bform ?? '',
+      father: r.fatherName ?? '',
+      fatherCnic: r.fatherCnic ?? '',
+      mobile: r.mobile ?? '',
+      prevSchool: x.prevSchool ?? '',
+      cls: r.className ?? '',
+      classId: String(r.classId ?? ''),
+      campus: x.campus ?? '',
+      feePaid: x.feePaid ?? !!r.feePaid,
+      feeAmount: Number(r.feeAmount) || REG_FEE,
+      principal: r.principal ?? 'pending',
+      status: r.status ?? 'registered',
+      testId: x.testId,
+      marks: x.marks,
+      interview: x.interview,
+      decision: DECISION_FROM[String(r.decision).toLowerCase()] ?? 'Pending',
+      admission: admitted
+        ? { section: x.admission?.section ?? '', gr: x.admission?.gr, feePaid: true, logins: x.admission?.logins, final: true }
+        : x.admission,
+    };
+  });
+  const patchLocal = (regNo: string, p: RegExtra) => setExtra(m => ({ ...m, [regNo]: { ...(m[regNo] ?? {}), ...p } }));
+  return { list, q, patchLocal };
 }
 
-export type TestSchedule = { id: string; cls: string; date: string; time: string; room: string; published: boolean };
+export type TestSchedule = {
+  id: string;
+  name: string;
+  cls: string;
+  classId: string;
+  date: string;
+  time: string;
+  room: string;
+  subjects: Array<{ name: string; max: number }>;
+  published: boolean;
+};
 
-const TESTS_SEED: TestSchedule[] = [
-  { id: 't1', cls: 'Class 3', date: 'Sat 17 Oct', time: '9:00 AM', room: 'Hall A', published: false },
-  { id: 't2', cls: 'Class 1', date: 'Sat 17 Oct', time: '11:00 AM', room: 'Room 4', published: false },
-  { id: 't3', cls: 'Class 6', date: 'Sat 31 Oct', time: '9:00 AM', room: 'Hall A', published: false },
-];
+// /api/web/entry-tests. Publishing results has no endpoint yet, so the
+// published flag stays in this app.
+export function useTests() {
+  const cls = useLiveClasses();
+  const q = useApi('adm:entry-tests', webA.entryTests);
+  const [published, setPublished] = useShared<Record<string, boolean>>('fd.testsPublished', {});
+  const list: TestSchedule[] = (q.data ?? []).map(t => {
+    const ids = Array.isArray(t.class_ids) ? t.class_ids : [];
+    return {
+      id: String(t.id),
+      name: t.name,
+      cls: ids.length ? cls.nameOf(ids[0]) : t.name,
+      classId: ids.length ? String(ids[0]) : '',
+      date: t.test_date,
+      time: t.test_time ?? '',
+      room: t.room ?? '',
+      subjects: Array.isArray(t.subjects) && t.subjects.length ? t.subjects : TEST_SUBJECTS.map(name => ({ name, max: TEST_MAX })),
+      published: !!published[String(t.id)],
+    };
+  });
+  return { list, q, setPublished };
+}
 
-export const useTests = () => useShared<TestSchedule[]>('fd.tests', TESTS_SEED);
-
-export const testTotal = (r: Registration) =>
-  r.marks ? TEST_SUBJECTS.reduce((s, sub) => s + (r.marks?.[sub] ?? 0), 0) : 0;
+export const testTotal = (r: Pick<Registration, 'marks'>) =>
+  r.marks ? Object.values(r.marks).reduce((s, v) => s + (Number(v) || 0), 0) : 0;
 
 // Merit list: highest total first; equal totals share a rank (1, 1, 3).
-export function meritList(regs: Registration[]) {
-  const withMarks = regs.filter(r => r.marks);
+export function meritList<T extends Pick<Registration, 'marks' | 'name'>>(regs: T[]) {
+  const withMarks = regs.filter(r => r.marks && Object.keys(r.marks).length);
   const sorted = [...withMarks].sort((a, b) => testTotal(b) - testTotal(a) || a.name.localeCompare(b.name));
   return sorted.map(r => ({
     reg: r,
@@ -155,7 +234,7 @@ const campusCode = (campus: string) =>
 export function nextGr(campus: string) {
   const code = campusCode(campus);
   const used = getShared<string[]>('fd.grUsed', []);
-  const all = [...ADMIN_STUDENTS.map(s => s.gr), ...used].filter(g => g.startsWith(`GR-${code}-`));
+  const all = [...liveStudents().map(s => s.gr), ...used].filter(g => g.startsWith(`GR-${code}-`));
   const max = all.reduce((m, g) => Math.max(m, Number(g.split('-')[2]) || 0), 0);
   const gr = `GR-${code}-${String(max + 1).padStart(4, '0')}`;
   setShared<string[]>('fd.grUsed', prev => [...(prev ?? []), gr]);
@@ -176,7 +255,7 @@ export function findDuplicate(
   const c = digits(fatherCnic);
   const n = name.trim().toLowerCase();
   const siblings = c ? siblingsOf(fatherCnic) : [];
-  const student = ADMIN_STUDENTS.find(
+  const student = liveStudents().find(
     s => (b && digits(s.bForm) === b) || (c && digits(s.fatherCnic) === c && s.name.toLowerCase() === n),
   );
   if (student) {
@@ -193,7 +272,7 @@ export function findDuplicate(
 
 export function siblingsOf(fatherCnic: string, exceptId?: string): AdminStudent[] {
   const c = fatherCnic.replace(/\D/g, '');
-  return ADMIN_STUDENTS.filter(s => s.id !== exceptId && s.fatherCnic.replace(/\D/g, '') === c);
+  return liveStudents().filter(s => s.id !== exceptId && s.fatherCnic.replace(/\D/g, '') === c);
 }
 
 // ---------- Student status history ----------
@@ -221,21 +300,9 @@ export type CertRequest = {
   serial?: string;
 };
 
-const CERT_SEED: CertRequest[] = [
-  { id: 'cr1', studentId: 'st2', type: 'Character', purpose: 'Visa application', status: 'Requested', from: 'Parent portal' },
-  { id: 'cr2', studentId: 'st5', type: 'Bonafide', purpose: 'Bank account', status: 'Requested', from: 'Parent portal' },
-  { id: 'cr3', studentId: 'st9', type: 'Leaving', purpose: 'Moving to Karachi', status: 'Requested', from: 'Parent portal' },
-  { id: 'cr4', studentId: 'st14', type: 'Bonafide', purpose: 'Sports trial', status: 'Issued', from: 'Front desk', serial: 'BC-26-0041' },
-];
 
-export const useCertRequests = () => useShared<CertRequest[]>('fd.certs', CERT_SEED);
 
 export type IssueLog = { serial: string; studentId: string; type: CertType; by: string; when: string };
-export const useIssueLog = () =>
-  useShared<IssueLog[]>('fd.issueLog', [
-    { serial: 'BC-26-0041', studentId: 'st14', type: 'Bonafide', by: 'Saba Noreen', when: '19 Oct' },
-    { serial: 'CC-26-0102', studentId: 'st20', type: 'Character', by: 'Saba Noreen', when: '12 Oct' },
-  ]);
 
 let certSeq = 120;
 export function nextSerial(type: CertType) {
@@ -248,42 +315,14 @@ export function nextSerial(type: CertType) {
 
 export type Visitor = { id: string; name: string; cnic: string; purpose: string; met: string; in: string; out?: string };
 
-export const useVisitors = () =>
-  useShared<Visitor[]>('fd.visitors', [
-    { id: 'v1', name: 'Shahzad Akram', cnic: '35202-5566778-1', purpose: 'Fee query', met: 'Accounts', in: '9:05 AM' },
-    { id: 'v2', name: 'Nida Farooq', cnic: '35201-1122334-2', purpose: 'Admission inquiry', met: 'Front Desk', in: '9:40 AM' },
-    { id: 'v3', name: 'Ali Raza', cnic: '35202-1234567-7', purpose: 'Early pickup', met: 'Class teacher 5-A', in: '11:10 AM', out: '11:22 AM' },
-    { id: 'v4', name: 'Pak Stationers rep', cnic: '35202-9988776-5', purpose: 'Supplier delivery', met: 'Store', in: '10:15 AM' },
-  ]);
 
 export type PickupPerson = { name: string; relation: string; cnic: string };
 
-export const PICKUP_SEED: Record<string, PickupPerson[]> = Object.fromEntries(
-  ADMIN_STUDENTS.slice(0, 30).map(s => [
-    s.id,
-    [
-      { name: s.father, relation: 'Father', cnic: s.fatherCnic },
-      { name: `Mrs. ${s.father.split(' ')[1]}`, relation: 'Mother', cnic: s.fatherCnic.replace(/-\d$/, '-2') },
-      ...(s.id === 'st2' ? [{ name: 'Ali Raza', relation: 'Uncle', cnic: '35202-1234567-7' }] : []),
-    ],
-  ]),
-);
 
-export const usePickupPersons = () => useShared<Record<string, PickupPerson[]>>('fd.pickup', PICKUP_SEED);
 
 export type GatePass = { id: string; studentId: string; person: string; relation: string; time: string; reason: string };
-export const useGatePasses = () =>
-  useShared<GatePass[]>('fd.gatepasses', [
-    { id: 'gp1', studentId: 'st2', person: 'Ali Raza', relation: 'Uncle', time: '15 Oct 11:20', reason: 'Doctor appointment' },
-  ]);
 
 export type Call = { id: string; dir: 'Incoming' | 'Outgoing'; name: string; number: string; purpose: string; time: string };
-export const useCalls = () =>
-  useShared<Call[]>('fd.calls', [
-    { id: 'c1', dir: 'Incoming', name: 'Mrs. Hashmi', number: '0321 4455667', purpose: 'Admission test date', time: '8:50 AM' },
-    { id: 'c2', dir: 'Outgoing', name: 'Imran Khan', number: '0300 441 0000', purpose: 'Absent alert follow-up', time: '10:35 AM' },
-    { id: 'c3', dir: 'Incoming', name: 'Transport office', number: '042 35761234', purpose: 'Route 3 delay', time: '7:55 AM' },
-  ]);
 
 export const nowTime = () => {
   const d = new Date();
@@ -294,3 +333,178 @@ export const nowTime = () => {
 
 export const campusOptions = CAMPUSES.map(c => c.name);
 export const campusIdByName = (name: string) => CAMPUSES.find(c => c.name === name)?.id ?? 'main';
+
+// ---------- Live students from the school server ----------
+// /api/web/students (and /fees/defaulters for dues) mapped to the AdminStudent
+// shape the Front Desk screens use. The helpers above read this list.
+
+const STATUS_FROM: Record<string, AdminStudent['status']> = {
+  active: 'Active',
+  provisional: 'Active',
+  struck_off: 'Struck off',
+  left: 'Left',
+  transferred: 'Transferred',
+};
+export const STATUS_TO: Record<AdminStudent['status'], string> = {
+  Active: 'active',
+  'Struck off': 'struck_off',
+  Left: 'left',
+  Transferred: 'transferred',
+};
+
+export function toAdminStudent(s: WebStudent, due = 0): AdminStudent {
+  return {
+    id: s.id,
+    name: s.name,
+    gender: s.gender === 'Female' || s.gender === 'F' ? 'F' : 'M',
+    gr: s.grNo,
+    className: s.className,
+    section: s.section,
+    roll: Number(s.rollNo) || 0,
+    campus: getSession()?.campusId && getSession()?.campusId !== 'all' ? String(getSession()?.campusId) : 'all',
+    father: s.fatherName ?? '',
+    fatherCnic: s.fatherCnic ?? '',
+    mobile: s.mobile ?? '',
+    bForm: s.bform ?? '',
+    status: STATUS_FROM[s.status] ?? 'Active',
+    due,
+    attendance: 0,
+    result: 0,
+    admitted: s.admissionDate ?? '',
+  };
+}
+
+export function liveStudents(): AdminStudent[] {
+  return getShared<AdminStudent[]>('fd.liveStudents', []);
+}
+
+// Loads every student of the selected campus (all statuses) once per screen.
+export function useLiveStudents() {
+  const q = useApi('adm:students:fd', async () => {
+    const [list, dues] = await Promise.all([webA.students({ pageSize: 500 }), webA.defaulters().catch(() => [])]);
+    const dueMap = new Map(dues.map(d => [String(d.id), Number(d.amount) || 0]));
+    const out = list.items.map(s => toAdminStudent(s, dueMap.get(s.id) ?? 0));
+    setShared('fd.liveStudents', out);
+    return out;
+  });
+  return { list: q.data ?? [], q };
+}
+
+// ---------- Server-backed lists (module records) ----------
+// Certificates, issue log, visitors, pickup persons, gate passes and calls are
+// /api/web/modules/{key} records, so the parent app and web panel see them too.
+
+const CERT_FROM: Record<string, CertType> = { leaving: 'Leaving', character: 'Character', bonafide: 'Bonafide' };
+const certStatus = (s: string): CertRequest['status'] =>
+  s === 'issued' ? 'Issued' : s === 'rejected' ? 'Rejected' : s === 'waiting' ? 'Waiting approval' : 'Requested';
+
+export const useCertRequests = () =>
+  useModuleList<CertRequest>(
+    'certreqs',
+    r => ({
+      id: String(r.id),
+      studentId: field(r, 'studentId'),
+      type: CERT_FROM[field(r, 'kind', 'title').toLowerCase()] ?? 'Other',
+      purpose: field(r, 'purpose', 'note') || '—',
+      status: certStatus(field(r, 'status')),
+      from: field(r, 'from') === 'Front desk' ? 'Front desk' : 'Parent portal',
+      serial: field(r, 'serial') || undefined,
+    }),
+    x => ({
+      title: x.type.toLowerCase(),
+      kind: x.type.toLowerCase(),
+      studentId: Number(x.studentId) || x.studentId,
+      purpose: x.purpose,
+      from: x.from,
+      serial: x.serial,
+      status: x.status === 'Issued' ? 'issued' : x.status === 'Rejected' ? 'rejected' : x.status === 'Waiting approval' ? 'waiting' : 'requested',
+    }),
+  );
+
+export const useIssueLog = () =>
+  useModuleList<IssueLog & { id: string }>(
+    'cert-issues',
+    r => ({ id: String(r.id), serial: field(r, 'serial', 'title'), studentId: field(r, 'studentId'), type: (field(r, 'type') as CertType) || 'Other', by: field(r, 'by'), when: field(r, 'when', 'recordDate', 'record_date') }),
+    x => ({ title: x.serial, status: 'issued', serial: x.serial, studentId: x.studentId, type: x.type, by: x.by, when: x.when }),
+  );
+
+// The server's visitor row has name, purpose and person to meet; CNIC and the
+// out time are kept in this app until the server stores them.
+export function useVisitors() {
+  const [extra, setExtra] = useShared<Record<string, { cnic?: string; out?: string }>>('fd.visitorExtra', {});
+  const [list, setList, q] = useModuleList<Visitor>(
+    'visitors',
+    r => {
+      const id = String(r.id);
+      const at = field(r, 'in_at');
+      return {
+        id,
+        name: field(r, 'name'),
+        cnic: extra[id]?.cnic ?? field(r, 'cnic') ?? '',
+        purpose: field(r, 'purpose'),
+        met: field(r, 'person_to_meet', 'personToMeet', 'met'),
+        in: at ? new Date(at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : field(r, 'in'),
+        out: extra[id]?.out ?? (field(r, 'out_at') || undefined),
+      };
+    },
+    v => ({ name: v.name, purpose: v.purpose, personToMeet: v.met, cnic: v.cnic }),
+  );
+  const set = (fn: (l: Visitor[]) => Visitor[]) => {
+    const next = fn(list);
+    const changedOnlyExtra = next.length === list.length && next.every((v, i) => v.id === list[i].id && v.name === list[i].name && v.purpose === list[i].purpose);
+    next.forEach(v => {
+      if (v.out || v.cnic) {
+        setExtra(m => ({ ...m, [v.id]: { cnic: v.cnic, out: v.out } }));
+      }
+    });
+    if (!changedOnlyExtra) {
+      // New visitors keep their CNIC under the temporary id until reload.
+      setList(next);
+    }
+  };
+  return [list, set, q] as const;
+}
+
+// Pickup persons: "pickup" records with studentId (managed by parents in the
+// parent app and checked here).
+export function usePickupPersons() {
+  const [rows, setRows, q] = useModuleList<PickupPerson & { id: string; studentId: string }>(
+    'pickup',
+    r => ({ id: String(r.id), studentId: field(r, 'studentId'), name: field(r, 'name', 'title'), relation: field(r, 'relation', 'status'), cnic: field(r, 'cnic', 'notes') }),
+    p => ({ title: p.name, status: p.relation, name: p.name, relation: p.relation, cnic: p.cnic, notes: p.cnic, studentId: Number(p.studentId) || p.studentId }),
+  );
+  const map: Record<string, PickupPerson[]> = {};
+  rows.forEach(r => {
+    (map[r.studentId] ??= []).push({ name: r.name, relation: r.relation, cnic: r.cnic });
+  });
+  const set = (fn: (m: Record<string, PickupPerson[]>) => Record<string, PickupPerson[]>) => {
+    const next = fn(map);
+    const out: Array<PickupPerson & { id: string; studentId: string }> = [];
+    Object.entries(next).forEach(([studentId, persons]) =>
+      persons.forEach(p => {
+        const existing = rows.find(r => r.studentId === studentId && r.name === p.name && r.cnic === p.cnic);
+        out.push(existing ?? { ...p, id: `new-${studentId}-${p.cnic}-${out.length}`, studentId });
+      }),
+    );
+    // Removed persons are deleted on the server.
+    rows.filter(r => !out.some(o => o.id === r.id)).forEach(r => {
+      webA.deleteModule('pickup', r.id).catch(() => undefined);
+    });
+    setRows(out);
+  };
+  return [map, set, q] as const;
+}
+
+export const useGatePasses = () =>
+  useModuleList<GatePass>(
+    'gatepass',
+    r => ({ id: String(r.id), studentId: field(r, 'studentId'), person: field(r, 'person', 'title'), relation: field(r, 'relation'), time: field(r, 'time', 'recordDate'), reason: field(r, 'reason') }),
+    g => ({ title: g.person, status: 'released', studentId: g.studentId, person: g.person, relation: g.relation, time: g.time, reason: g.reason }),
+  );
+
+export const useCalls = () =>
+  useModuleList<Call>(
+    'calls',
+    r => ({ id: String(r.id), dir: field(r, 'dir') === 'Outgoing' ? 'Outgoing' : 'Incoming', name: field(r, 'name', 'title'), number: field(r, 'number'), purpose: field(r, 'purpose'), time: field(r, 'time') }),
+    c => ({ title: c.name, status: c.dir.toLowerCase(), dir: c.dir, name: c.name, number: c.number, purpose: c.purpose, time: c.time }),
+  );

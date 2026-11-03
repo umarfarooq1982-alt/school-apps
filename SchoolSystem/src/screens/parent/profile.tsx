@@ -1,18 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import {
-  Bell,
-  CalendarDays,
-  Clock,
-  Flag,
-  Heart,
-  MapPin,
-  Pencil,
-  Phone,
-  Shield,
-  Star,
-  User,
-} from 'lucide-react-native';
+import { Bell, CalendarDays, Clock, Flag, Heart, MapPin, Pencil, Phone, Shield, Star, User } from 'lucide-react-native';
 import {
   Avatar,
   Badge,
@@ -25,74 +13,65 @@ import {
   StatTile,
   toast,
 } from '../../components/ui';
+import { Empty, QueryView } from '../../components/states';
 import { colors } from '../../theme';
 import { ScreenProps, useNav } from '../../navigation';
 import { useShared } from '../../store';
 import { useI18n } from '../../i18n';
-import { PARENT } from '../../data/school';
-import { useCurrentChild } from '../../data/useChild';
+import { familyApi } from '../../api/mobile';
+import { useMutation } from '../../api/hooks';
+import { cap, fmtDate, useChildId, useFamily } from '../shared';
 
-type ChangeReq = {
-  what: string;
-  sent: string;
-  mobile: string;
-  address: string;
-  emergency: string;
-};
+// The server has no list of sent change requests, so the last one sent from
+// this phone is remembered to show the "waiting for the office" note.
+type SentChange = { what: string; sent: string };
+function useSentChanges() {
+  return useShared<Record<number, SentChange>>('parent.changeReq', {});
+}
 
-const CURRENT = {
-  mobile: PARENT.mobile,
-  address: 'House 12, Street 4, Model Town',
-  emergency: '0321 8899001 (Sana Imran)',
-};
-
-function useChangeRequests() {
-  return useShared<Record<string, ChangeReq>>('parent.changeReq', {
-    ayesha: {
-      what: 'Address',
-      sent: '20 Oct',
-      mobile: CURRENT.mobile,
-      address: 'House 21, Street 9, Peoples Colony',
-      emergency: CURRENT.emergency,
-    },
-  });
+export function useProfile() {
+  return useFamily('profile', familyApi.profile);
 }
 
 export function ParentProfile(_: ScreenProps) {
   const nav = useNav();
   const { t } = useI18n();
-  const child = useCurrentChild();
-  const [reqs] = useChangeRequests();
-  const req = reqs[child.id];
+  const q = useProfile();
+  const [sent] = useSentChanges();
+  const req = q.data ? sent[q.data.id] : undefined;
   return (
-    <Screen title="Profile">
-      <Card>
-        <View style={s.head}>
-          <Avatar name={child.name} size={58} ring />
-          <View style={s.flex}>
-            <Text style={s.name}>{child.name}</Text>
-            <Text style={s.sub}>
-              {child.gr} · {child.className} · {child.campus}
-            </Text>
-            <View style={s.badges}>
-              <Badge label={`${t('Blood')} ${child.bloodGroup}`} tone="danger" />
-              <Badge label="Transport" tone="info" />
-            </View>
-          </View>
-        </View>
-      </Card>
-      <Card>
-        <ListRow icon={User} title={t('Father')} subtitle={PARENT.name} />
-        <ListRow icon={Phone} title={t('Mobile')} subtitle={CURRENT.mobile} />
-        <ListRow icon={MapPin} title={t('Address')} subtitle={CURRENT.address} />
-        <ListRow icon={CalendarDays} title={t('Date of birth')} subtitle={child.dob} last />
-      </Card>
-      <Button
-        label="Request a change"
-        variant="outline"
-        icon={Pencil}
-        onPress={() => nav.push('ParentChangeRequest')}
-      />
+    <Screen title="Profile" refreshing={q.refreshing} onRefresh={q.refresh}>
+      <QueryView q={q}>
+        {p => (
+          <>
+            <Card>
+              <View style={s.head}>
+                <Avatar name={p.name} size={58} ring />
+                <View style={s.flex}>
+                  <Text style={s.name}>{p.name}</Text>
+                  <Text style={s.sub}>
+                    {p.grNo} · {p.className}-{p.section}
+                    {p.rollNo ? ` · ${t('Roll')} ${p.rollNo}` : ''}
+                  </Text>
+                  {p.gender ? (
+                    <View style={s.badges}>
+                      <Badge label={p.gender === 'F' ? 'Girl' : 'Boy'} tone="info" />
+                    </View>
+                  ) : null}
+                </View>
+              </View>
+            </Card>
+            <Card>
+              <ListRow icon={User} title={t('Father')} subtitle={p.father || '—'} />
+              {p.mother ? <ListRow icon={User} title={t('Mother')} subtitle={p.mother} /> : null}
+              <ListRow icon={Phone} title={t('Mobile')} subtitle={p.mobile || '—'} />
+              <ListRow icon={MapPin} title={t('Address')} subtitle={p.address || '—'} />
+              <ListRow icon={CalendarDays} title={t('Date of birth')} subtitle={fmtDate(p.dob, true)} last />
+            </Card>
+          </>
+        )}
+      </QueryView>
+      <Button label="Request a change" variant="outline" icon={Pencil} onPress={() => nav.push('ParentChangeRequest')} />
       {req ? (
         <InfoBanner
           tone="warn"
@@ -107,17 +86,28 @@ export function ParentProfile(_: ScreenProps) {
 export function ParentChangeRequest(_: ScreenProps) {
   const nav = useNav();
   const { t } = useI18n();
-  const child = useCurrentChild();
-  const [reqs, setReqs] = useChangeRequests();
-  const prev = reqs[child.id];
-  const [mobile, setMobile] = useState(prev?.mobile ?? CURRENT.mobile);
-  const [address, setAddress] = useState(prev?.address ?? CURRENT.address);
-  const [emergency, setEmergency] = useState(prev?.emergency ?? CURRENT.emergency);
-  const send = () => {
+  const childId = useChildId();
+  const q = useProfile();
+  const [, setSent] = useSentChanges();
+  const [mobile, setMobile] = useState('');
+  const [address, setAddress] = useState('');
+  const [note, setNote] = useState('');
+  useEffect(() => {
+    if (q.data) {
+      setMobile(m => m || q.data?.mobile || '');
+      setAddress(a => a || q.data?.address || '');
+    }
+  }, [q.data]);
+  const send = useMutation(
+    (b: { mobile?: string; address?: string; note?: string }) => familyApi.changeRequest(b, childId),
+    'Request sent to the office',
+  );
+  const submit = async () => {
+    const p = q.data;
     const changed = [
-      mobile !== CURRENT.mobile && 'Mobile',
-      address !== CURRENT.address && 'Address',
-      emergency !== CURRENT.emergency && 'Emergency contact',
+      mobile !== (p?.mobile ?? '') && 'Mobile',
+      address !== (p?.address ?? '') && 'Address',
+      note.trim() && 'Emergency contact',
     ].filter(Boolean) as string[];
     if (!changed.length) {
       toast(t('Nothing changed'));
@@ -127,28 +117,25 @@ export function ParentChangeRequest(_: ScreenProps) {
       toast(t('Enter an 11-digit mobile number'));
       return;
     }
-    setReqs(r => ({
-      ...r,
-      [child.id]: {
-        what: changed.length > 1 ? 'Contact details' : changed[0],
-        sent: '22 Oct',
-        mobile,
-        address,
-        emergency,
-      },
-    }));
-    toast(t('Request sent to the office'));
-    nav.pop();
+    const r = await send.run({ mobile, address, note: note.trim() || undefined });
+    if (r && p) {
+      const d = new Date();
+      setSent(m => ({
+        ...m,
+        [p.id]: { what: changed.length > 1 ? 'Contact details' : changed[0], sent: `${d.getDate()}/${d.getMonth() + 1}` },
+      }));
+      nav.pop();
+    }
   };
   return (
     <Screen
       title="Request a change"
-      subtitle={child.name}
-      footer={<Button label="Send request" onPress={send} />}
+      subtitle={q.data?.name}
+      footer={<Button label="Send request" onPress={submit} loading={send.busy} />}
     >
       <Field label="Mobile number" value={mobile} onChangeText={setMobile} keyboardType="phone-pad" />
       <Field label="Address" icon={MapPin} value={address} onChangeText={setAddress} />
-      <Field label="Emergency contact" value={emergency} onChangeText={setEmergency} />
+      <Field label="Emergency contact" value={note} onChangeText={setNote} placeholder="0321 8899001 (Sana)" />
       <InfoBanner
         tone="warn"
         icon={Shield}
@@ -158,52 +145,64 @@ export function ParentChangeRequest(_: ScreenProps) {
   );
 }
 
-const NOTES = [
-  { title: 'Helped a classmate', sub: '20 Oct · Ms. Sadia · +2', positive: true },
-  { title: 'Homework not done', sub: '7 Oct · Ms. Asma · -1', positive: false },
-  { title: 'Class monitor duty', sub: '29 Sep · +2', positive: true },
-];
-
 export function ParentBehavior(_: ScreenProps) {
   const { t } = useI18n();
-  const child = useCurrentChild();
+  const profile = useProfile();
+  const q = useFamily('health', familyApi.health);
+  const list = q.data ?? [];
+  const isSick = (k: unknown) => /sick|health|bay/i.test(String(k ?? ''));
+  const behavior = list.filter(r => !isSick(r.kind ?? r.status));
+  const sick = list.filter(r => isSick(r.kind ?? r.status));
+  const points = behavior.reduce((a, r) => a + (Number(r.points) || 0), 0);
   return (
-    <Screen title="Behavior and health" subtitle={child.name}>
+    <Screen title="Behavior and health" subtitle={profile.data?.name} refreshing={q.refreshing} onRefresh={q.refresh}>
       <View style={s.stats}>
-        <StatTile value="+3" label="Behavior points" active />
-        <StatTile value="1" label="Sick-bay visit" />
-        <StatTile value={child.bloodGroup} label="Blood group" />
+        <StatTile value={points > 0 ? `+${points}` : String(points)} label="Behavior points" active />
+        <StatTile value={String(sick.length)} label="Sick-bay visit" />
+        <StatTile value={String(behavior.length)} label="Notes" />
       </View>
-      <Card title="Behavior notes">
-        {NOTES.map((n, i) => (
-          <ListRow
-            key={n.title}
-            icon={n.positive ? Star : Flag}
-            title={n.title}
-            subtitle={n.sub}
-            right={
-              <Badge
-                label={n.positive ? 'Positive' : 'Warning'}
-                tone={n.positive ? 'success' : 'danger'}
-              />
-            }
-            last={i === NOTES.length - 1}
-          />
-        ))}
-      </Card>
-      <Card title="Health">
-        <ListRow
-          icon={Heart}
-          iconTone="danger"
-          title="Sick bay · 15 Oct, 10:40"
-          subtitle="Headache. Rested 30 min, given water. Back to class."
-          last
-        />
-      </Card>
-      <InfoBanner
-        icon={Bell}
-        text={t('You get a notification every time a note or sick-bay visit is recorded.')}
-      />
+      <QueryView q={q}>
+        {() => (
+          <>
+            <Card title="Behavior notes">
+              {behavior.length ? (
+                behavior.map((n, i) => {
+                  const pts = Number(n.points) || 0;
+                  return (
+                    <ListRow
+                      key={n.id}
+                      icon={pts < 0 ? Flag : Star}
+                      title={String(n.note || n.title)}
+                      subtitle={`${fmtDate(n.recordDate)}${pts ? ` · ${pts > 0 ? '+' : ''}${pts}` : ''}`}
+                      right={<Badge label={pts < 0 ? 'Warning' : 'Positive'} tone={pts < 0 ? 'danger' : 'success'} />}
+                      last={i === behavior.length - 1}
+                    />
+                  );
+                })
+              ) : (
+                <Empty text="No behavior notes." />
+              )}
+            </Card>
+            <Card title="Health">
+              {sick.length ? (
+                sick.map((n, i) => (
+                  <ListRow
+                    key={n.id}
+                    icon={Heart}
+                    iconTone="danger"
+                    title={`${cap(String(n.kind ?? 'Sick bay'))} · ${fmtDate(n.recordDate)}`}
+                    subtitle={String(n.note || n.title)}
+                    last={i === sick.length - 1}
+                  />
+                ))
+              ) : (
+                <Empty text="No sick-bay visits." />
+              )}
+            </Card>
+          </>
+        )}
+      </QueryView>
+      <InfoBanner icon={Bell} text={t('You get a notification every time a note or sick-bay visit is recorded.')} />
     </Screen>
   );
 }

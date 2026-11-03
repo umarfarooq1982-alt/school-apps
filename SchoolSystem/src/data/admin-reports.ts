@@ -475,3 +475,69 @@ export function reportData(id: string): ReportData {
       return { columns: ['—'], rows: [], summary: () => 'No data' };
   }
 }
+
+// ---------- Live reports (/api/web/reports/{kind}) ----------
+// Section 6 reports the server can produce. The rest keep sample rows.
+
+export const LIVE_REPORTS: Record<string, string> = {
+  r1: 'strength',
+  r2: 'admissions',
+  r5: 'collection',
+  r6: 'collection',
+  r7: 'defaulters',
+  r11: 'discounts',
+  r12: 'attendance',
+  r14: 'staff',
+  r16: 'leave',
+};
+
+// Row fields for each server report, in column order.
+const LIVE_COLUMNS: Record<string, Array<[string, string]>> = {
+  strength: [['grNo', 'GR No.'], ['name', 'Name'], ['classId', 'Class'], ['section', 'Section'], ['gender', 'Gender'], ['status', 'Status']],
+  admissions: [['regNo', 'Reg No.'], ['name', 'Name'], ['classId', 'Class'], ['decision', 'Decision'], ['status', 'Status']],
+  collection: [['date', 'Date'], ['amount', 'Amount'], ['mode', 'Mode'], ['status', 'Status']],
+  defaulters: [['voucher', 'Voucher'], ['studentId', 'Student'], ['amount', 'Outstanding'], ['status', 'Status']],
+  discounts: [['studentId', 'Student'], ['type', 'Type'], ['value', 'Value'], ['status', 'Status']],
+  attendance: [['date', 'Date'], ['classId', 'Class'], ['section', 'Section']],
+  staff: [['empId', 'Emp ID'], ['name', 'Name'], ['designation', 'Designation'], ['type', 'Type'], ['contractEnd', 'Contract end'], ['status', 'Status']],
+  leave: [['kind', 'For'], ['type', 'Type'], ['from', 'From'], ['status', 'Status']],
+};
+
+export type LiveRow = ReportRow & { date?: string };
+
+export function liveReportData(
+  id: string,
+  rows: Array<Record<string, unknown>>,
+  names: { cls: (id: unknown) => string; student: (id: unknown) => string },
+): ReportData & { rows: LiveRow[] } {
+  const kind = LIVE_REPORTS[id];
+  const text = (v: unknown) => (v === null || v === undefined || v === '' ? '—' : String(v));
+  if (id === 'r6') {
+    // Monthly collection: payments grouped by month.
+    const byMonth = new Map<string, { amount: number; n: number }>();
+    rows.forEach(r => {
+      const m = String(r.date ?? '').slice(0, 7) || '—';
+      const cur = byMonth.get(m) ?? { amount: 0, n: 0 };
+      byMonth.set(m, { amount: cur.amount + (Number(r.amount) || 0), n: cur.n + 1 });
+    });
+    const out: LiveRow[] = Array.from(byMonth.entries())
+      .sort(([a], [b]) => b.localeCompare(a))
+      .map(([m, v]) => ({ cells: [m, v.n, rs(v.amount)], date: `${m}-01` }));
+    return { columns: ['Month', 'Payments', 'Collected'], rows: out, summary: list => `${rs(sumCol(list, 2))} collected` };
+  }
+  const cols = LIVE_COLUMNS[kind] ?? Object.keys(rows[0] ?? {}).map(k => [k, k] as [string, string]);
+  const out: LiveRow[] = rows.map(r => ({
+    cells: cols.map(([k]) =>
+      k === 'classId' ? names.cls(r[k]) : k === 'studentId' ? names.student(r[k]) : k === 'amount' ? rs(Number(r[k]) || 0) : text(r[k]),
+    ),
+    cls: r.classId !== undefined ? names.cls(r.classId) : undefined,
+    section: r.section ? String(r.section) : undefined,
+    date: typeof r.date === 'string' ? r.date : typeof r.from === 'string' ? r.from : undefined,
+  }));
+  const amountCol = cols.findIndex(([k]) => k === 'amount');
+  return {
+    columns: cols.map(([, label]) => label),
+    rows: out,
+    summary: list => (amountCol >= 0 ? `${list.length} rows · ${rs(sumCol(list, amountCol))}` : `${list.length} rows`),
+  };
+}

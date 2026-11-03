@@ -37,7 +37,6 @@ import {
 } from '../../../components/ui';
 import { BottomSheet } from '../../../components/Tabs';
 import {
-  BarChart,
   FormSheet,
   KV,
   Kpi,
@@ -50,13 +49,11 @@ import {
 import { colors, radius } from '../../../theme';
 import { ScreenProps, useNav, useParam } from '../../../navigation';
 import {
-  ADMIN_STUDENTS,
   ALL_CAMPUSES,
   AdminStudent,
   CAMPUSES,
   CLASSES,
   SECTIONS,
-  SUBJECTS,
   campusName,
   logAudit,
   requestApproval,
@@ -71,7 +68,6 @@ import {
   CertType,
   nextSerial,
   nowTime,
-  siblingsOf,
   useCalls,
   useCertRequests,
   useGatePasses,
@@ -80,22 +76,27 @@ import {
   useStudentDocs,
   useStudentStatus,
   useVisitors,
+  STATUS_TO,
+  toAdminStudent,
+  useLiveStudents,
 } from '../../../data/admin-frontdesk';
 import { useOpen } from '../core';
+import { invalidate, useApi } from '../../../api/hooks';
+import { Student360, webA } from '../../../api/webA';
+import { errorMessage } from '../../../api/client';
+import { useApiSession } from '../../../api/session';
+import { NoApiBanner, QueryView } from '../../../components/states';
 import { ReadOnlyBanner, statusTone, useGuard } from './util';
 
 const STATUSES: AdminStudent['status'][] = ['Active', 'Struck off', 'Left', 'Transferred'];
 const DOCS = ['B-Form', 'Photo', 'Previous result', 'Leaving certificate'];
 const studentLabel = (s: AdminStudent) => `${s.name} · ${s.gr}`;
-const PICK_STUDENTS = ADMIN_STUDENTS.slice(0, 30);
 
-// Applies status changes made in this session on top of the seed data.
+// Live students of the selected campus with this session's status changes.
 function useStudents() {
   const [status] = useStudentStatus();
-  return useMemo(
-    () => ADMIN_STUDENTS.map(s => (status[s.id] ? { ...s, status: status[s.id].status } : s)),
-    [status],
-  );
+  const { list } = useLiveStudents();
+  return useMemo(() => list.map(s => (status[s.id] ? { ...s, status: status[s.id].status } : s)), [list, status]);
 }
 
 // ---------- Students ----------
@@ -137,61 +138,81 @@ export function AdminStudents(_: ScreenProps) {
 }
 
 export function AdminStudentProfile(_: ScreenProps) {
+  const id = String(useParam('id', ''));
+  const q = useApi(id ? `adm:student:${id}` : null, () => webA.student(id));
+  if (!q.data) {
+    return (
+      <Screen title="Student">
+        <QueryView q={q}>{() => null}</QueryView>
+      </Screen>
+    );
+  }
+  return <StudentProfile key={q.data.id} d={q.data} refresh={q.refresh} refreshing={q.refreshing} />;
+}
+
+function StudentProfile({ d, refresh, refreshing }: { d: Student360; refresh: () => Promise<void>; refreshing: boolean }) {
   const nav = useNav();
   const open = useOpen();
   const { guard } = useGuard();
-  const id = useParam('id', ADMIN_STUDENTS[0].id);
-  const students = useStudents();
-  const s = students.find(x => x.id === id) ?? students[0];
+  const s = toAdminStudent(d, d.dues);
   const [statusMap, setStatusMap] = useStudentStatus();
   const [docs, setDocs] = useStudentDocs();
   const [tab, setTab] = useState('Personal');
   const [statusSheet, setStatusSheet] = useState(false);
   const [reasonEl, ask] = useReasonPrompt();
   const [role] = useStaffRole();
-  const siblings = siblingsOf(s.fatherCnic, s.id);
-  const uploaded = docs[s.id] ?? ['B-Form', 'Photo'];
+  const [session] = useApiSession();
+  const uploaded = docs[s.id] ?? (d.photoUrl ? ['Photo'] : []);
   const history = statusMap[s.id]?.history ?? [];
-  const seed = Number(s.id.replace(/\D/g, '')) || 1;
+  const marked = d.attendance.filter(x => x.mark && x.mark !== '—');
+  const present = marked.filter(x => x.mark === 'P' || x.mark === 'L').length;
+  const attPct = marked.length ? Math.round((present / marked.length) * 100) : 0;
+  const total = d.results.reduce((n, r) => n + r.marks, 0);
+  const max = d.results.reduce((n, r) => n + r.max, 0);
+  const pct = max ? Math.round((total / max) * 1000) / 10 : 0;
+  const paid = d.vouchers.reduce((n, v) => n + (Number(v.paid) || 0), 0);
 
   const changeStatus = (to: AdminStudent['status']) => {
     setStatusSheet(false);
     if (to === s.status) {
       return;
     }
-    ask(`Change status to ${to}`, reason => {
+    ask(`Change status to ${to}`, async reason => {
+      try {
+        await webA.updateStudent(s.id, { status: STATUS_TO[to] });
+      } catch (e) {
+        toast(errorMessage(e));
+        return;
+      }
       setStatusMap(m => ({
         ...m,
         [s.id]: {
           status: to,
           history: [
-            { when: 'Today', from: s.status, to, reason, by: roleInfo(role).user },
+            { when: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }), from: s.status, to, reason, by: session?.user.name ?? roleInfo(role).user },
             ...(m[s.id]?.history ?? []),
           ],
         },
       }));
       logAudit('Student status', `${s.name} (${s.gr}): ${s.status} → ${to}. Reason: ${reason}`);
-      toast(`Status changed to ${to}. History kept.`);
+      toast(`Status changed to ${to}.`);
+      invalidate('adm:students');
+      refresh();
     });
   };
 
-  const subjects = SUBJECTS.slice(0, 6).map((sub, i) => ({
-    name: sub.name,
-    marks: Math.max(30, Math.min(99, s.result + ((seed * (i + 3)) % 17) - 8)),
-  }));
-
   return (
-    <Screen title={s.name} subtitle={`${s.gr} · ${s.className}-${s.section} · ${campusName(s.campus)}`}>
+    <Screen title={s.name} subtitle={`${s.gr} · ${s.className}-${s.section} · ${campusName(s.campus)}`} refreshing={refreshing} onRefresh={refresh}>
       <ReadOnlyBanner />
       {reasonEl}
       <Card style={st.head}>
         <Avatar name={s.name} size={56} ring />
         <View style={st.flex}>
           <Text style={adminStyles.bold}>{s.name}</Text>
-          <Text style={adminStyles.small}>Roll {s.roll} · admitted {s.admitted}</Text>
+          <Text style={adminStyles.small}>Roll {d.rollNo ?? '—'} · admitted {d.admissionDate ?? '—'}</Text>
           <View style={[adminStyles.row, st.mt4]}>
             <Badge label={s.status} tone={statusTone(s.status)} />
-            {s.transport ? <Badge label={s.transport} tone="info" /> : null}
+            {d.staffChild ? <Badge label="Staff child" tone="info" /> : null}
           </View>
         </View>
       </Card>
@@ -204,13 +225,14 @@ export function AdminStudentProfile(_: ScreenProps) {
       {tab === 'Personal' ? (
         <>
           <Card>
-            <KV k="Gender" v={s.gender === 'F' ? 'Female' : 'Male'} />
+            <KV k="Gender" v={d.gender ?? '—'} />
+            <KV k="Date of birth" v={d.dob ?? '—'} />
             <KV k="GR No." v={s.gr} />
             <KV k="Class" v={`${s.className}-${s.section}`} />
-            <KV k="Roll No." v={String(s.roll)} />
-            <KV k="B-Form" v={s.bForm} />
-            <KV k="Campus" v={campusName(s.campus)} />
-            <KV k="Transport" v={s.transport ?? 'Not using'} last />
+            <KV k="Roll No." v={d.rollNo ?? '—'} />
+            <KV k="B-Form" v={d.bform ?? '—'} />
+            <KV k="Address" v={d.address ?? '—'} />
+            <KV k="Previous school" v={d.prevSchool ?? '—'} last />
           </Card>
           <Button label="Change status" variant="outline" onPress={guard(() => setStatusSheet(true))} />
         </>
@@ -219,21 +241,23 @@ export function AdminStudentProfile(_: ScreenProps) {
       {tab === 'Guardian' ? (
         <>
           <Card>
-            <KV k="Father" v={s.father} />
-            <KV k="Father CNIC" v={s.fatherCnic} />
-            <KV k="Mobile" v={s.mobile} />
-            <KV k="Parent portal login" v={s.mobile} last />
+            <KV k="Father" v={d.fatherName ?? '—'} />
+            <KV k="Father CNIC" v={d.fatherCnic ?? '—'} />
+            <KV k="Mother" v={d.motherName ?? '—'} />
+            <KV k="Occupation" v={d.occupation ?? '—'} />
+            <KV k="Mobile" v={d.mobile ?? '—'} />
+            <KV k="Parent portal login" v={d.mobile ?? '—'} last />
           </Card>
-          <Card title={`Siblings (linked by father CNIC) · ${siblings.length}`}>
-            {siblings.length === 0 ? <Text style={adminStyles.small}>No siblings in the school.</Text> : null}
-            {siblings.map((x, i) => (
+          <Card title={`Siblings (linked by father CNIC) · ${d.siblings.length}`}>
+            {d.siblings.length === 0 ? <Text style={adminStyles.small}>No siblings in the school.</Text> : null}
+            {d.siblings.map((x, i) => (
               <ListRow
                 key={x.id}
                 avatar={x.name}
                 title={x.name}
-                subtitle={`${x.gr} · ${x.className}-${x.section}`}
+                subtitle={`${x.grNo} · section ${x.section}`}
                 onPress={() => nav.push('AdminStudentProfile', { id: x.id })}
-                last={i === siblings.length - 1}
+                last={i === d.siblings.length - 1}
               />
             ))}
           </Card>
@@ -243,22 +267,20 @@ export function AdminStudentProfile(_: ScreenProps) {
       {tab === 'Fee' ? (
         <>
           <KpiGrid>
-            <Kpi label="Outstanding" value={formatRs(s.due)} tone={s.due ? 'danger' : 'success'} sub={s.due ? 'holds apply' : 'clear'} />
-            <Kpi label="Paid this session" value={formatRs(8500 * 6)} sub="6 vouchers" />
+            <Kpi label="Outstanding" value={formatRs(d.dues)} tone={d.dues ? 'danger' : 'success'} sub={d.dues ? 'holds apply' : 'clear'} />
+            <Kpi label="Paid" value={formatRs(paid)} sub={`${d.vouchers.length} vouchers`} />
           </KpiGrid>
           <Card title="Vouchers">
-            {['November 2026', 'October 2026', 'September 2026', 'August 2026'].map((m, i) => {
-              const unpaid = i === 0 && s.due > 0;
-              return (
-                <ListRow
-                  key={m}
-                  title={m}
-                  subtitle={`V-26-${String(400 + seed * 4 + i).padStart(6, '0')}`}
-                  right={<Badge label={unpaid ? 'Unpaid' : 'Paid'} tone={unpaid ? 'danger' : 'success'} />}
-                  last={i === 3}
-                />
-              );
-            })}
+            {d.vouchers.length === 0 ? <Text style={adminStyles.small}>No vouchers yet.</Text> : null}
+            {d.vouchers.map((v, i) => (
+              <ListRow
+                key={v.id}
+                title={v.month}
+                subtitle={`${v.voucherNo} · ${formatRs(Number(v.amount) || 0)}`}
+                right={<Badge label={v.status} tone={v.status === 'paid' ? 'success' : v.status === 'partial' ? 'warn' : 'danger'} />}
+                last={i === d.vouchers.length - 1}
+              />
+            ))}
           </Card>
           <Button label="Open fee collection counter" variant="outline" onPress={() => open('AdminFeeCounter')} />
         </>
@@ -267,39 +289,37 @@ export function AdminStudentProfile(_: ScreenProps) {
       {tab === 'Attendance' ? (
         <>
           <KpiGrid>
-            <Kpi label="This session" value={`${s.attendance}%`} tone={s.attendance < 75 ? 'danger' : 'success'} sub={s.attendance < 75 ? 'shortage' : 'ok'} />
-            <Kpi label="Absent" value={String(Math.round((100 - s.attendance) * 1.1))} sub="days" />
+            <Kpi label="Recent days" value={`${attPct}%`} tone={attPct < 75 && marked.length ? 'danger' : 'success'} sub={`${marked.length} days marked`} />
+            <Kpi label="Absent" value={String(marked.filter(x => x.mark === 'A').length)} sub="days" />
           </KpiGrid>
-          <Card title="Monthly attendance %">
-            <BarChart
-              data={['Apr', 'May', 'Aug', 'Sep', 'Oct'].map((m, i) => ({
-                label: m,
-                value: Math.min(100, s.attendance + ((seed + i * 5) % 9) - 4),
-                highlight: m === 'Oct',
-              }))}
-              format={v => `${v}%`}
-            />
+          <Card title="Recent attendance">
+            {d.attendance.length === 0 ? <Text style={adminStyles.small}>No attendance marked yet.</Text> : null}
+            {d.attendance.slice(0, 20).map((x, i, arr) => (
+              <ListRow key={x.date} title={x.date} right={<Badge label={x.mark} tone={x.mark === 'A' ? 'danger' : x.mark === 'L' ? 'warn' : 'success'} />} last={i === arr.length - 1} />
+            ))}
           </Card>
         </>
       ) : null}
 
       {tab === 'Results' ? (
-        <Card title={`Mid-term 2026 · ${s.result}%`}>
-          {subjects.map((x, i) => (
-            <ListRow key={x.name} title={x.name} right={<Text style={adminStyles.bold}>{x.marks} / 100</Text>} last={i === subjects.length - 1} />
+        <Card title={`Results · ${pct}%`}>
+          {d.results.length === 0 ? <Text style={adminStyles.small}>No marks entered yet.</Text> : null}
+          {d.results.map((x, i) => (
+            <ListRow key={`${x.subject}-${i}`} title={x.subject} right={<Text style={adminStyles.bold}>{x.marks} / {x.max}</Text>} last={i === d.results.length - 1} />
           ))}
         </Card>
       ) : null}
 
       {tab === 'Documents' ? (
         <Card>
-          {DOCS.map((d, i) => {
-            const has = uploaded.includes(d);
+          <NoApiBanner what="Document upload" />
+          {DOCS.map((doc, i) => {
+            const has = uploaded.includes(doc);
             return (
               <ListRow
-                key={d}
+                key={doc}
                 icon={FileBadge}
-                title={d}
+                title={doc}
                 subtitle={has ? 'Uploaded' : 'Missing'}
                 right={
                   has ? (
@@ -311,9 +331,9 @@ export function AdminStudentProfile(_: ScreenProps) {
                       variant="outline"
                       style={st.smallBtn}
                       onPress={guard(() => {
-                        setDocs(m => ({ ...m, [s.id]: [...uploaded, d] }));
-                        logAudit('Student documents', `${s.name}: ${d} uploaded`);
-                        toast(`${d} uploaded (demo)`);
+                        setDocs(m => ({ ...m, [s.id]: [...uploaded, doc] }));
+                        logAudit('Student documents', `${s.name}: ${doc} marked as received`);
+                        toast(`${doc} marked as received`);
                       })}
                     />
                   )
@@ -330,8 +350,7 @@ export function AdminStudentProfile(_: ScreenProps) {
           {history.map((h, i) => (
             <ListRow key={`${h.to}${i}`} icon={FileClock} title={`${h.from} → ${h.to}`} subtitle={`${h.when} · ${h.by} · ${h.reason}`} />
           ))}
-          <ListRow icon={FileClock} title={`Promoted to ${s.className}`} subtitle="1 Apr 2026 · session 2026-27" />
-          <ListRow icon={FileClock} title={`Admitted · ${s.gr}`} subtitle={`${s.admitted} · ${campusName(s.campus)}`} last />
+          <ListRow icon={FileClock} title={`Admitted · ${s.gr}`} subtitle={`${d.admissionDate ?? '—'} · ${d.className}`} last />
         </Card>
       ) : null}
 
@@ -387,7 +406,7 @@ export function AdminCertificates(_: ScreenProps) {
     }
     const serial = nextSerial(r.type);
     setReqs(list => list.map(x => (x.id === id ? { ...x, status: 'Issued', serial } : x)));
-    setLog(l => [{ serial, studentId: r.studentId, type: r.type, by: roleInfo(role).user, when: 'Today' }, ...l]);
+    setLog(l => [{ id: `il-${serial}`, serial, studentId: r.studentId, type: r.type, by: roleInfo(role).user, when: 'Today' }, ...l]);
     logAudit('Certificate', `${r.type} certificate ${serial} issued to ${stu?.name}`);
     toast(
       r.from === 'Parent portal'
@@ -448,10 +467,19 @@ export function AdminCertificateIssue(_: ScreenProps) {
   const [, setReqs] = useCertRequests();
   const [, setLog] = useIssueLog();
   const [role] = useStaffRole();
-  const [studentLbl, setStudentLbl] = useState(studentLabel(PICK_STUDENTS[0]));
+  const PICK_STUDENTS = useStudents().filter(x => x.status === 'Active');
+  const [studentLbl, setStudentLbl] = useState('');
   const [type, setType] = useState<CertType>('Character');
   const [purpose, setPurpose] = useState('');
-  const stu = PICK_STUDENTS.find(x => studentLabel(x) === studentLbl) ?? PICK_STUDENTS[0];
+  const picked = PICK_STUDENTS.find(x => studentLabel(x) === studentLbl) ?? PICK_STUDENTS[0];
+  if (!picked) {
+    return (
+      <Screen title="Issue certificate">
+        <InfoBanner text="Loading students…" />
+      </Screen>
+    );
+  }
+  const stu = picked;
   const blocked = type === 'Leaving' && stu.due > 0;
   return (
     <Screen
@@ -475,7 +503,7 @@ export function AdminCertificateIssue(_: ScreenProps) {
             }
             const serial = nextSerial(type);
             setReqs(l => [{ id: `cr${Date.now()}`, studentId: stu.id, type, purpose, status: 'Issued', from: 'Front desk', serial }, ...l]);
-            setLog(l => [{ serial, studentId: stu.id, type, by: roleInfo(role).user, when: 'Today' }, ...l]);
+            setLog(l => [{ id: `il-${serial}`, serial, studentId: stu.id, type, by: roleInfo(role).user, when: 'Today' }, ...l]);
             logAudit('Certificate', `${type} certificate ${serial} issued to ${stu.name}`);
             toast(`${serial} issued and sent to printer (demo)`);
             nav.pop();
@@ -483,7 +511,7 @@ export function AdminCertificateIssue(_: ScreenProps) {
         />
       }
     >
-      <PickerField label="Student" value={studentLbl} options={PICK_STUDENTS.map(studentLabel)} onChange={setStudentLbl} />
+      <PickerField label="Student" value={studentLabel(stu)} options={PICK_STUDENTS.map(studentLabel)} onChange={setStudentLbl} />
       <Chips options={CERT_TYPES} value={type} onChange={v => setType(v as CertType)} />
       <Field label="Needed for" value={purpose} onChangeText={setPurpose} placeholder="e.g. Visa application" />
       {blocked ? <InfoBanner tone="danger" text={`${formatRs(stu.due)} is outstanding. A leaving certificate needs the dues cleared or Principal approval.`} /> : null}
@@ -506,7 +534,8 @@ export function AdminCertificateIssue(_: ScreenProps) {
 
 export function AdminCertificateLog(_: ScreenProps) {
   const [log] = useIssueLog();
-  const name = (id: string) => ADMIN_STUDENTS.find(x => x.id === id)?.name ?? id;
+  const students = useStudents();
+  const name = (id: string) => students.find(x => x.id === id)?.name ?? id;
   return (
     <ListScreen
       title="Certificate issue log"
@@ -522,8 +551,11 @@ export function AdminCertificateLog(_: ScreenProps) {
 }
 
 export function AdminIdCards(_: ScreenProps) {
-  const [cls, setCls] = useState('Class 5');
-  const list = ADMIN_STUDENTS.filter(x => x.className === cls && x.status === 'Active');
+  const students = useStudents();
+  const classNames = Array.from(new Set(students.map(x => x.className)));
+  const [clsPick, setCls] = useState('');
+  const cls = clsPick || classNames[0] || '';
+  const list = students.filter(x => x.className === cls && x.status === 'Active');
   return (
     <Screen
       title="Student ID cards"
@@ -539,7 +571,7 @@ export function AdminIdCards(_: ScreenProps) {
         />
       }
     >
-      <PickerField label="Class" value={cls} options={CLASSES.slice(3)} onChange={setCls} />
+      <PickerField label="Class" value={cls} options={classNames} onChange={setCls} />
       {list.slice(0, 4).map(x => (
         <Card key={x.id} style={st.idCard}>
           <Placeholder icon={Camera} height={74} style={st.idPhoto} />
@@ -636,8 +668,11 @@ export function AdminGatePass(_: ScreenProps) {
   const { guard } = useGuard();
   const [pickup, setPickup] = usePickupPersons();
   const [passes, setPasses] = useGatePasses();
-  const [studentLbl, setStudentLbl] = useState(studentLabel(PICK_STUDENTS[1]));
-  const stu = PICK_STUDENTS.find(x => studentLabel(x) === studentLbl) ?? PICK_STUDENTS[0];
+  const PICK_STUDENTS = useStudents().filter(x => x.status === 'Active');
+  const allStudents = useStudents();
+  const [studentLbl, setStudentLbl] = useState('');
+  const blank: AdminStudent = { id: '', name: '—', gender: 'M', gr: '', className: '', section: '', roll: 0, campus: '', father: '', fatherCnic: '', mobile: '', bForm: '', status: 'Active', due: 0, attendance: 0, result: 0, admitted: '' };
+  const stu = PICK_STUDENTS.find(x => studentLabel(x) === studentLbl) ?? PICK_STUDENTS[0] ?? blank;
   const persons = pickup[stu.id] ?? [];
   const OTHER = 'Someone else (not on the list)';
   const [person, setPerson] = useState('');
@@ -680,7 +715,7 @@ export function AdminGatePass(_: ScreenProps) {
       <ReadOnlyBanner />
       <PickerField
         label="Student"
-        value={studentLbl}
+        value={stu.id ? studentLabel(stu) : studentLbl}
         options={PICK_STUDENTS.map(studentLabel)}
         onChange={v => {
           setStudentLbl(v);
@@ -731,7 +766,7 @@ export function AdminGatePass(_: ScreenProps) {
           <ListRow
             key={g.id}
             icon={DoorOpen}
-            title={`${ADMIN_STUDENTS.find(x => x.id === g.studentId)?.name ?? g.studentId} → ${g.person}`}
+            title={`${allStudents.find(x => x.id === g.studentId)?.name ?? g.studentId} → ${g.person}`}
             subtitle={`${g.relation} · ${g.time} · ${g.reason}`}
             last={i === passes.length - 1}
           />

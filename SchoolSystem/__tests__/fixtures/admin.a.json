@@ -1,0 +1,84 @@
+{
+  "/api/web/modules/inquiries": {
+    "data": [
+      { "id": 1, "child_name": "Fixture Child", "parent_name": "Fixture Parent", "mobile": "03001112233", "class_id": 10, "source": "Walk-in", "status": "new", "notes": null, "created_at": "2026-11-03T06:44:50.000Z" },
+      { "id": 2, "child_name": "Second Child", "parent_name": null, "mobile": "03004445566", "class_id": 17, "source": "Call", "status": "contacted", "notes": "Asked about transport" }
+    ]
+  },
+  "/api/web/registrations": {
+    "data": [
+      { "id": "3", "regNo": "REG-26-0002", "name": "Ahmed Test", "className": "Class 5", "classId": "17", "fatherName": "Imran Test", "fatherCnic": "35202-7654321-1", "mobile": "0300-7654321", "feeAmount": "1500.00", "feePaid": true, "decision": "selected", "principal": "approved", "status": "admitted", "gender": "M", "dob": "2016-03-14", "bform": null },
+      { "id": "4", "regNo": "REG-26-0003", "name": "Fixture Candidate", "className": "Class 5", "classId": "17", "fatherName": "Fixture Father", "fatherCnic": "35202-1111111-1", "mobile": "0300-1111111", "feeAmount": "1500.00", "feePaid": true, "decision": "selected", "principal": "pending", "status": "registered", "gender": "F", "dob": "2016-05-01", "bform": "35202-2222222-2" },
+      { "id": "5", "regNo": "REG-26-0004", "name": "Pending Candidate", "className": "Class 5", "classId": "17", "fatherName": "Other Father", "fatherCnic": "35202-3333333-3", "mobile": "0300-3333333", "feeAmount": "1500.00", "feePaid": true, "decision": "pending", "principal": "pending", "status": "registered", "gender": "M", "dob": "2016-07-09", "bform": null }
+    ]
+  },
+  "/api/web/entry-tests": {
+    "data": [
+      { "id": 1, "name": "Class 5 entry test", "test_date": "2026-11-07", "test_time": "9:00 AM", "room": "Hall A", "class_ids": [17], "reg_ids": [4, 5], "subjects": [{ "name": "English", "max": 50 }, { "name": "Mathematics", "max": 50 }, { "name": "Urdu", "max": 50 }] }
+    ]
+  },
+  "/api/web/entry-tests/:id/merit": {
+    "data": {
+      "test": { "id": 1, "name": "Class 5 entry test", "test_date": "2026-11-07", "test_time": "9:00 AM", "room": "Hall A", "class_ids": [17], "reg_ids": [4, 5], "subjects": [] },
+      "merit": [
+        { "id": 4, "name": "Fixture Candidate", "regNo": "REG-26-0003", "classId": 17, "marks": { "English": 44, "Mathematics": 41, "Urdu": 38 }, "total": 123, "decision": "selected", "rank": 1 },
+        { "id": 5, "name": "Pending Candidate", "regNo": "REG-26-0004", "classId": 17, "marks": { "English": 30, "Mathematics": 28, "Urdu": 35 }, "total": 93, "decision": "pending", "rank": 2 }
+      ]
+    }
+  },
+  "POST /api/web/entry-tests/:id/marks": {
+    "data": { "test": { "id": 1, "name": "Class 5 entry test", "test_date": "2026-11-07", "test_time": null, "room": null, "subjects": [] }, "merit": [] }
+  },
+  "POST /api/web/registrations": {
+    "data": { "id": "6", "regNo": "REG-26-0005", "name": "New Candidate", "className": "Class 5", "classId": "17", "fatherName": "New Father", "fatherCnic": "35202-4444444-4", "mobile": "0300-4444444", "feeAmount": "1500.00", "feePaid": true, "decision": "pending", "principal": "pending", "status": "registered", "gender": "M", "dob": "2016-01-01", "bform": null },
+    "message": "Registered"
+  },
+  "POST /api/web/registrations/:id/admit": {
+    "data": { "studentId": 44, "grNo": "GR-MC-0004", "parentPassword": "fixture1", "studentPassword": "fixture2" },
+    "message": "Admitted"
+  },
+  "/api/web/modules/curriculum": {
+    "data": [
+      { "id": 11, "title": "Fractions", "status": "done", "kind": "chapter", "cls": "Class 5", "subject": "Mathematics", "record_date": "2026-10-01" },
+      { "id": 12, "title": "Week 1 plan", "status": "planned", "kind": "plan", "cls": "Class 5", "subject": "English", "record_date": "2026-11-02" }
+    ]
+  },
+  "/api/web/modules/health": {
+    "data": [
+      { "id": 21, "title": "Late homework", "status": "open", "kind": "behavior", "studentId": "42", "record_date": "2026-11-02" },
+      { "id": 22, "title": "Headache", "status": "sent home", "kind": "sickbay", "studentId": "43", "record_date": "2026-11-03" }
+    ]
+  },
+  "/api/web/modules/surveys": {
+    "data": [{ "id": 31, "title": "Parent satisfaction", "status": "open", "questions": ["Teaching quality", "Communication"], "record_date": "2026-10-20" }]
+  },
+  "/api/web/modules/survey-answers": {
+    "data": [{ "id": 32, "title": "answer", "status": "submitted", "surveyId": "31", "answers": [4, 5] }]
+  },
+  "/api/web/modules/complaint-meta": { "data": [] },
+  "/api/web/modules/certreqs": {
+    "data": [{ "id": 41, "title": "character", "kind": "character", "status": "requested", "studentId": 42, "purpose": "Scholarship", "from": "Parent portal" }]
+  },
+  "/api/web/modules/cert-issues": { "data": [] },
+  "/api/web/modules/gatepass": {
+    "data": [{ "id": 51, "title": "Imran Test", "status": "released", "studentId": "42", "person": "Imran Test", "relation": "Father", "time": "11:30 AM", "reason": "Doctor visit" }]
+  },
+  "/api/web/modules/calls": {
+    "data": [{ "id": 61, "title": "Fixture Caller", "status": "incoming", "dir": "Incoming", "name": "Fixture Caller", "number": "03007778899", "purpose": "Admission query", "time": "10:05 AM" }]
+  },
+  "/api/web/modules/pickup": {
+    "data": [{ "id": 71, "title": "Imran Test", "status": "Father", "studentId": 42, "name": "Imran Test", "relation": "Father", "cnic": "35202-7654321-1" }]
+  },
+  "/api/web/modules/staff-transfers": { "data": [] },
+  "/api/web/modules/admit-cards": { "data": [] },
+  "/api/web/modules/seating": { "data": [] },
+  "/api/web/modules/datesheet": {
+    "data": [{ "id": 81, "title": "English", "status": "scheduled", "examId": "1", "cls": "Class 5", "subject": "English", "date": "2026-10-12", "time": "8:30 – 11:00" }]
+  },
+  "/api/web/modules/invigilation": {
+    "data": [{ "id": 91, "title": "Sadia Anwar (Test)", "status": "assigned", "date": "2026-10-12", "room": "Hall A", "teacher": "Sadia Anwar (Test)" }]
+  },
+  "/api/web/backup": {
+    "data": { "exportedAt": "2026-11-03T06:00:00.000Z", "counts": { "students": 3, "staff": 1, "records": 12 } }
+  }
+}

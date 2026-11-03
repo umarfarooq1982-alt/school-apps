@@ -7,6 +7,7 @@ import type { AcademicSession, Campus, ServerRole } from './session';
 
 export type LoginResult = {
   accessToken: string;
+  refreshToken?: string;
   user: {
     id: string;
     name: string;
@@ -48,7 +49,8 @@ export const authApi = {
       auth: false,
       body: { key, code, password, schoolCode },
     }),
-  logout: () => request<null>('POST', '/api/mobile/auth/logout', { auth: false }),
+  logout: (refreshToken?: string) =>
+    request<null>('POST', '/api/mobile/auth/logout', { auth: false, body: refreshToken ? { refreshToken } : undefined }),
   me: () => api.get<LoginResult['user'] & { campuses: Campus[]; sessions: AcademicSession[] }>('/api/mobile/auth/me'),
   changePassword: (current: string, next: string) =>
     api.post<null>('/api/mobile/auth/password/change', { current, next }),

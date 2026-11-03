@@ -1,6 +1,7 @@
 // Dummy data and shared state for the Owner / Admin app (SOW 3.2).
 import { useCallback } from 'react';
 import { getShared, setShared, useShared } from '../store';
+import { getSession, useApiSession } from '../api/session';
 
 // ---------- Staff roles and access ----------
 
@@ -82,8 +83,11 @@ export function useAdminSession() {
 export function useReadOnly() {
   const [session] = useAdminSession();
   const [role] = useStaffRole();
-  const s = SESSIONS.find(x => x.id === session);
-  return s?.status === 'Closed' && role !== 'owner';
+  const [api] = useApiSession();
+  // Server sessions first (selected X-Session-Id); sample list as fallback.
+  const live = api?.sessions.find(x => x.id === (api.sessionId ?? session));
+  const closed = live ? live.isClosed : SESSIONS.find(x => x.id === session)?.status === 'Closed';
+  return closed && role !== 'owner';
 }
 
 // ---------- Academic structure ----------
@@ -213,7 +217,8 @@ export function campusName(id: string) {
   if (id === ALL_CAMPUSES) {
     return 'All campuses';
   }
-  return CAMPUSES.find(c => c.id === id)?.name ?? id;
+  const live = getSession()?.campuses.find(c => String(c.id) === String(id));
+  return live?.name ?? CAMPUSES.find(c => c.id === id)?.name ?? id;
 }
 
 // ---------- Approvals inbox (shared by every panel) ----------

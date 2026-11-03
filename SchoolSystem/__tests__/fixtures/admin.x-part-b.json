@@ -1,0 +1,405 @@
+{
+ "/api/web/payroll": {
+  "data": [
+   {
+    "id": 1,
+    "staff_id": 9,
+    "month": "2026-11",
+    "basic": "54000.00",
+    "allowances": "0.00",
+    "deductions": "0.00",
+    "net": "54000.00",
+    "status": "draft",
+    "staffName": "Sadia Anwar (Test)",
+    "empId": "EMP-0001",
+    "designation": "Teacher"
+   }
+  ]
+ },
+ "/api/web/library/issues": {
+  "data": [
+   {
+    "id": 1,
+    "book_id": 1,
+    "borrower": "Ayesha Test",
+    "issued_on": "2026-10-10",
+    "due_on": "2026-10-24",
+    "returned_on": null,
+    "fine": "0.00",
+    "bookTitle": "Tales from Pakistan",
+    "overdue": true
+   },
+   {
+    "id": 2,
+    "book_id": 2,
+    "borrower": "Ahmed Test",
+    "issued_on": "2026-09-01",
+    "due_on": "2026-09-15",
+    "returned_on": "2026-09-18",
+    "fine": "30.00",
+    "bookTitle": "The Secret Garden",
+    "overdue": false
+   }
+  ]
+ },
+ "/api/web/modules/library": {
+  "data": [
+   {
+    "id": 1,
+    "title": "Tales from Pakistan",
+    "author": "S. Ahmed",
+    "copies": 3,
+    "isbn": "978-969-0000-01"
+   },
+   {
+    "id": 2,
+    "title": "The Secret Garden",
+    "author": "F. H. Burnett",
+    "copies": 1,
+    "isbn": null
+   }
+  ]
+ },
+ "/api/web/modules/vehicles": {
+  "data": [
+   {
+    "id": 1,
+    "plate": "LEA-4512",
+    "type": "Coaster",
+    "capacity": 24,
+    "driver_name": "Muhammad Aslam",
+    "driver_phone": "0301-2233445",
+    "status": "active"
+   }
+  ]
+ },
+ "/api/web/modules/routes": {
+  "data": [
+   {
+    "id": 1,
+    "name": "Route 3 · Model Town",
+    "vehicle_id": 1,
+    "fare": "3500.00"
+   }
+  ]
+ },
+ "/api/web/modules/items": {
+  "data": [
+   {
+    "id": 1,
+    "name": "Uniform shirt · 28",
+    "sku": "UNI-SH-28",
+    "stock": 6,
+    "reorder_level": 10,
+    "unit": "pcs"
+   },
+   {
+    "id": 2,
+    "name": "English reader · Class 5",
+    "sku": "BK-EN-5",
+    "stock": 40,
+    "reorder_level": 10,
+    "unit": "pcs"
+   }
+  ]
+ },
+ "/api/web/modules/expenses": {
+  "data": [
+   {
+    "id": 1,
+    "category": "Utilities",
+    "title": "Electricity October",
+    "amount": "84000.00",
+    "exp_date": "2026-10-28",
+    "status": "pending"
+   }
+  ]
+ },
+ "/api/web/modules/fuel": {
+  "data": [
+   {
+    "id": 1,
+    "uuid": "f1",
+    "title": "LEA-4512",
+    "status": "posted",
+    "recordDate": "2026-10-30",
+    "vehicle": "LEA-4512",
+    "kind": "Fuel",
+    "litres": 40,
+    "amount": 11600,
+    "odometer": 48210
+   }
+  ]
+ },
+ "/api/web/modules/boarding": {
+  "data": [
+   {
+    "id": 1,
+    "uuid": "b1",
+    "title": "Route 3 · Model Town",
+    "status": "done",
+    "recordDate": "2026-11-02",
+    "route": "Route 3 · Model Town",
+    "trip": "Morning",
+    "boarded": 18,
+    "absent": 2
+   }
+  ]
+ },
+ "/api/web/modules/hiring": {
+  "data": [
+   {
+    "id": 1,
+    "uuid": "h1",
+    "title": "Nida Khan",
+    "status": "interview",
+    "recordDate": "2026-10-29",
+    "position": "Science teacher",
+    "remarks": "Good demo class"
+   }
+  ]
+ },
+ "/api/web/modules/online-pay": {
+  "data": [
+   {
+    "id": 1,
+    "uuid": "op1",
+    "title": "V-26-000003",
+    "status": "unavailable",
+    "recordDate": "2026-11-02",
+    "voucherId": 61,
+    "gateway": "jazzcash",
+    "amount": 7225
+   }
+  ]
+ },
+ "/api/web/modules/purchases": {
+  "data": [
+   {
+    "id": 1,
+    "uuid": "p1",
+    "title": "Ali Uniforms",
+    "status": "ordered",
+    "recordDate": "2026-10-25",
+    "item": "Uniform shirt · 28",
+    "qty": 50,
+    "amount": 37500
+   }
+  ]
+ },
+ "/api/web/modules/sales": {
+  "data": [
+   {
+    "id": 1,
+    "uuid": "s1",
+    "title": "Ayesha Test",
+    "status": "done",
+    "recordDate": "2026-10-26",
+    "item": "English reader · Class 5",
+    "qty": 1,
+    "amount": 650,
+    "payment": "Cash"
+   }
+  ]
+ },
+ "/api/web/modules/assets": {
+  "data": [
+   {
+    "id": 1,
+    "uuid": "a1",
+    "title": "Projector",
+    "status": "good",
+    "recordDate": "2026-04-01",
+    "tag": "AST-001",
+    "location": "Room R105",
+    "condition": "good",
+    "value": 85000
+   }
+  ]
+ },
+ "/api/web/fees/discounts": {
+  "data": [
+   {
+    "id": 1,
+    "student_id": 42,
+    "type": "need",
+    "mode": "pct",
+    "value": "20.00",
+    "valid_from": "2026-11-01",
+    "valid_to": "2027-03-28",
+    "reason": "Father lost job",
+    "status": "pending",
+    "Student": {
+     "id": 42,
+     "name": "Ayesha Test",
+     "gr_no": "GR-MC-0002"
+    }
+   }
+  ]
+ },
+ "/api/web/fees/waivers": {
+  "data": [
+   {
+    "id": 1,
+    "student_id": 43,
+    "voucher_id": 61,
+    "type": "fine",
+    "amount": "150.00",
+    "reason": "Father in hospital",
+    "status": "pending"
+   }
+  ]
+ },
+ "/api/web/fees/cash-closing": {
+  "data": [
+   {
+    "id": 1,
+    "close_date": "2026-11-02",
+    "cashier_id": 9,
+    "cash_amount": "8500.00",
+    "bank_amount": "0.00",
+    "online_amount": "0.00",
+    "note": "All correct"
+   }
+  ]
+ },
+ "/api/web/fees/defaulters": {
+  "data": [
+   {
+    "id": "43",
+    "name": "Ahmed Test",
+    "grNo": "GR-MC-0003",
+    "section": "A",
+    "mobile": "0300-7654321",
+    "amount": 7225,
+    "vouchers": 1
+   },
+   {
+    "id": "41",
+    "name": "qwertyuiop",
+    "grNo": "GR-MC-0001",
+    "section": "A",
+    "mobile": null,
+    "amount": 0,
+    "vouchers": 1
+   }
+  ]
+ },
+ "/api/web/attendance/staff": {
+  "data": [
+   {
+    "id": "9",
+    "name": "Sadia Anwar (Test)",
+    "empId": "EMP-0001",
+    "designation": "Teacher",
+    "status": "present",
+    "timeIn": "07:44",
+    "timeOut": null
+   }
+  ]
+ },
+ "/api/web/leave": {
+  "data": {
+   "policies": [
+    {
+     "id": 1,
+     "leave_type": "Casual",
+     "quota": 10
+    }
+   ],
+   "items": [
+    {
+     "id": "1",
+     "kind": "staff",
+     "name": "Sadia Anwar (Test)",
+     "type": "Casual",
+     "from": "2026-11-05",
+     "to": "2026-11-05",
+     "days": 1,
+     "reason": "Family event",
+     "status": "pending"
+    },
+    {
+     "id": "2",
+     "kind": "student",
+     "name": "Ayesha Test",
+     "type": "Sick",
+     "from": "2026-10-14",
+     "to": "2026-10-15",
+     "days": 2,
+     "reason": "Fever",
+     "status": "approved"
+    }
+   ]
+  }
+ },
+ "/api/web/leave-calendar": {
+  "data": [
+   {
+    "id": 1,
+    "kind": "staff",
+    "leave_type": "Casual",
+    "from_date": "2026-11-05",
+    "to_date": "2026-11-05",
+    "status": "pending",
+    "staff_id": 9,
+    "student_id": null
+   }
+  ]
+ },
+ "POST /api/web/fees/vouchers/generate": {
+  "data": {
+   "count": 3
+  }
+ },
+ "POST /api/web/fees/collect": {
+  "data": {
+   "receiptNo": "R-26-000007",
+   "paymentId": 7,
+   "voucherStatus": "paid",
+   "studentId": 43
+  }
+ },
+ "POST /api/web/payroll/generate": {
+  "data": []
+ },
+ "POST /api/web/staff": {
+  "data": {
+   "id": "10",
+   "empId": "EMP-0002",
+   "name": "Test Employee",
+   "cnic": "35202-1111111-1",
+   "mobile": null,
+   "email": null,
+   "designation": "Teacher",
+   "department": "Academics",
+   "joinDate": "2026-11-03",
+   "type": "Permanent",
+   "contractEnd": null,
+   "basic": "0.00",
+   "status": "active",
+   "photoUrl": null
+  }
+ },
+ "/api/web/fees/export": {
+  "data": {
+   "csv": "voucher,student_id,month,amount,paid,status\nV-26-000003,43,2026-11,7225,0,unpaid"
+  }
+ },
+ "/api/web/modules/transport-assign": {
+  "data": [
+   {
+    "id": 1,
+    "uuid": "ta1",
+    "title": "Ayesha Test",
+    "status": "active",
+    "recordDate": "2026-11-03",
+    "studentId": 42,
+    "routeId": 1,
+    "stop": "Model Town stop",
+    "studentName": "Ayesha Test",
+    "grNo": "GR-MC-0002"
+   }
+  ]
+ }
+}

@@ -20,8 +20,9 @@ import { Card, IconButton, IconType, ListRow, Screen, toast } from '../../compon
 import { useNav } from '../../navigation';
 import { useSession } from '../../store';
 import { useI18n } from '../../i18n';
-import { TEACHER } from '../../data/teacher';
-import { useStudentLeaves } from './state';
+import { useApi } from '../../api/hooks';
+import { teacherApi } from '../../api/mobile';
+import { getSession } from '../../api/session';
 
 type Item = { icon: IconType; label: string; route?: string; sub?: string; onPress?: () => void };
 
@@ -30,8 +31,9 @@ export function TeacherMore() {
   const nav = useNav();
   const { t, lang, setLang } = useI18n();
   const { signOut } = useSession();
-  const [leaves] = useStudentLeaves();
-  const pending = leaves.filter(l => l.status === 'Pending').length;
+  const leaves = useApi('teacher.leaves', teacherApi.leaves);
+  const pending = (leaves.data || []).filter(l => l.status === 'pending').length;
+  const user = getSession()?.user;
 
   const sections: Item[][] = [
     [
@@ -75,7 +77,7 @@ export function TeacherMore() {
   return (
     <Screen
       title="More"
-      subtitle={`${TEACHER.name} · ${TEACHER.id}`}
+      subtitle={`${user?.name || t('Teacher')}${user?.staffId ? ` · Staff #${user.staffId}` : ''}`}
       right={
         <IconButton
           icon={Globe}

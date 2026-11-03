@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Camera, Clock, File, Send, X } from 'lucide-react-native';
+import { StyleSheet, Text } from 'react-native';
+import { Camera, Clock, File, Send } from 'lucide-react-native';
 import {
   Badge,
   Button,
@@ -11,204 +11,195 @@ import {
   IconButton,
   InfoBanner,
   ListRow,
-  Placeholder,
   Screen,
   StatTile,
   toast,
 } from '../../components/ui';
+import { Empty, QueryView } from '../../components/states';
 import { colors } from '../../theme';
 import { useNav, useParam } from '../../navigation';
 import { useShared } from '../../store';
 import { useI18n } from '../../i18n';
-import { CLASS_DIARY, MY_CLASSES } from '../../data/teacher';
-import { useDiaryPosted } from './state';
+import { useApi, useMutation } from '../../api/hooks';
+import { teacherApi } from '../../api/mobile';
+import { ClassChips, dayLabel, isoDate, subjectNameFor, useMyClasses } from './common';
 
-const INITIAL_TEXT: Record<string, string> = {
-  '5-A English':
-    'Read lesson 7 "The Honest Woodcutter".\nLearn and write 10 new words in the copy.\nSpelling test on Monday.',
+type DiaryRow = {
+  id: number;
+  subject_id: number | null;
+  staff_id?: number | null;
+  entry_date: string;
+  topic: string | null;
+  homework: string | null;
 };
 
-// T09: Diary tab and pushed screen (param classKey).
+// T09: Diary tab and pushed screen (params classKey, subjectId).
 export function TeacherPostDiary() {
   const nav = useNav();
   const { t } = useI18n();
-  const initialClass = useParam<string>('classKey', MY_CLASSES[0]);
-  const [cls, setCls] = useState(
-    MY_CLASSES.includes(initialClass) ? initialClass : MY_CLASSES[0],
-  );
-  const [texts, setTexts] = useShared<Record<string, string>>(
-    'teacher.diaryText',
-    INITIAL_TEXT,
-  );
-  const [photos, setPhotos] = useShared<Record<string, string[]>>(
-    'teacher.diaryPhotos',
-    { '5-A English': ['board.jpg'] },
-  );
-  const [posted, setPosted] = useDiaryPosted();
-  const text = texts[cls] ?? '';
-  const pics = photos[cls] ?? [];
+  const date = isoDate();
+  const classKey = useParam<string>('classKey', '');
+  const subjectParam = useParam<number | null>('subjectId', null);
+  const { classes, current, setPicked, today } = useMyClasses();
+  const cls = classes.find(c => c.key === classKey) || current;
+  const [subjectId, setSubjectId] = useState<number | null>(subjectParam);
+  const subject = cls?.subjects.find(x => x.subjectId === subjectId) || cls?.subjects[0];
+  const [topic, setTopic] = useState('');
+  const [homework, setHomework] = useState('');
+  const [, setPosted] = useShared<Record<string, boolean>>('teacher.diaryPosted', {});
+  const post = useMutation(teacherApi.postDiary);
 
-  const post = () => {
-    if (text.trim().length < 5) {
-      toast('Write the classwork and homework first');
+  const submit = async () => {
+    if (!cls) {
+      toast('No class is assigned to you yet');
       return;
     }
-    setPosted(p => ({ ...p, [cls]: true }));
-    toast(`Diary posted for ${cls}. Parents notified.`);
-    if (nav.canGoBack) {
-      // Opened from Today: go back once posted.
-      nav.pop();
+    if (topic.trim().length < 3) {
+      toast('Write what was taught first');
+      return;
+    }
+    const res = await post.run({
+      classId: cls.classId,
+      section: cls.section,
+      subjectId: subject?.subjectId ?? null,
+      topic: topic.trim(),
+      homework: homework.trim() || undefined,
+      date,
+    });
+    if (res) {
+      setPosted(p => ({ ...p, [`${cls.key}.${subject?.subjectId ?? null}.${date}`]: true }));
+      toast(`Diary posted for ${cls.label}. Parents can see it now.`);
+      setTopic('');
+      setHomework('');
+      if (nav.canGoBack) {
+        nav.pop();
+      }
     }
   };
 
   return (
     <Screen
       title="Post diary"
-      subtitle="Thursday 22 Oct"
-      right={
-        <IconButton
-          icon={File}
-          onPress={() => nav.push('TeacherClassDiary')}
-        />
-      }
-      footer={
-        <Button
-          icon={Send}
-          label={
-            posted[cls]
-              ? 'Update · parents get a notification'
-              : 'Post · parents get a notification'
-          }
-          onPress={post}
-        />
-      }
+      subtitle={dayLabel(date)}
+      right={<IconButton icon={File} onPress={() => nav.push('TeacherClassDiary', { classKey: cls?.key })} />}
+      footer={<Button icon={Send} label="Post · parents get a notification" onPress={submit} loading={post.busy} />}
     >
-      <Chips options={MY_CLASSES} value={cls} onChange={setCls} />
-      <Field
-        label="Classwork and homework"
-        value={text}
-        onChangeText={v => setTexts(p => ({ ...p, [cls]: v }))}
-        multiline
-        placeholder="What was taught and what to do at home"
-      />
-      <View style={s.photos}>
-        {pics.map((p, i) => (
-          <View key={`${p}-${i}`} style={s.photo}>
-            <Placeholder label={p} height={78} />
-            <Pressable
-              style={s.remove}
-              hitSlop={6}
-              onPress={() =>
-                setPhotos(prev => ({
-                  ...prev,
-                  [cls]: pics.filter((_, j) => j !== i),
-                }))
-              }
-            >
-              <X size={12} color={colors.white} />
-            </Pressable>
-          </View>
-        ))}
-        <Pressable
-          style={s.add}
-          onPress={() =>
-            setPhotos(prev => ({
-              ...prev,
-              [cls]: [...pics, `photo-${pics.length + 1}.jpg`],
-            }))
-          }
-        >
-          <Camera size={18} color={colors.primaryText} />
-          <Text style={s.addText}>{t('Add')}</Text>
-        </Pressable>
-      </View>
-      <InfoBanner icon={Clock} text="You can edit today's diary until 8:00 PM." />
-      {posted[cls] ? (
-        <InfoBanner tone="success" text="Posted. Editing again re-sends the update." />
-      ) : null}
-      <Button
-        label="Class diary"
-        variant="outline"
-        icon={File}
-        onPress={() => nav.push('TeacherClassDiary')}
-      />
+      <QueryView q={today} isEmpty={() => classes.length === 0} emptyText="No class is assigned to you yet.">
+        {() => (
+          <>
+            <ClassChips classes={classes} value={cls?.key} onChange={k => setPicked(k)} />
+            {cls && cls.subjects.length > 1 ? (
+              <Chips
+                options={cls.subjects.map(x => x.subject)}
+                value={subject?.subject || ''}
+                onChange={name => setSubjectId(cls.subjects.find(x => x.subject === name)?.subjectId ?? null)}
+              />
+            ) : null}
+            <Text style={s.sub}>
+              {cls?.label} · {subject?.subject || t('General')}
+            </Text>
+            <Field
+              label="Classwork"
+              value={topic}
+              onChangeText={setTopic}
+              multiline
+              placeholder="What was taught today"
+            />
+            <Field
+              label="Homework"
+              value={homework}
+              onChangeText={setHomework}
+              multiline
+              placeholder="What to do at home (optional)"
+            />
+            <Button
+              label="Add photo or PDF"
+              variant="outline"
+              icon={Camera}
+              onPress={() => toast('Attaching files needs the photo picker, which is not in the app yet.')}
+            />
+            <InfoBanner icon={Clock} text="You can edit today's diary until the school's cut-off time." />
+            <Button
+              label="Class diary"
+              variant="outline"
+              icon={File}
+              onPress={() => nav.push('TeacherClassDiary', { classKey: cls?.key })}
+            />
+          </>
+        )}
+      </QueryView>
     </Screen>
   );
 }
 
-// T10
+// T10: the full day's diary for a class.
 export function TeacherClassDiary() {
+  const date = isoDate();
+  const classKey = useParam<string>('classKey', '');
+  const { classes, current, setPicked } = useMyClasses();
+  const cls = classes.find(c => c.key === classKey) || current;
   const [filter, setFilter] = useState<'posted' | 'missing'>('posted');
-  const [posted] = useDiaryPosted();
-  const rows = CLASS_DIARY.map(d =>
-    d.subject === 'English' && posted['5-A English'] ? { ...d, posted: true } : d,
+  const q = useApi(cls ? `teacher.classDiary.${cls.key}.${date}` : null, () =>
+    teacherApi.classDiary(cls!.classId, cls!.section, date) as Promise<DiaryRow[]>,
   );
-  const done = rows.filter(r => r.posted);
-  const missing = rows.filter(r => !r.posted);
-  const list = filter === 'posted' ? [...done, ...missing] : missing;
+  const rows = (q.data || []) as DiaryRow[];
+  const missing = (cls?.subjects || []).filter(sub => !rows.some(r => r.subject_id === sub.subjectId));
   return (
-    <Screen title="Class diary" subtitle="Class 5-A · Thursday 22 Oct">
+    <Screen
+      title="Class diary"
+      subtitle={`${cls?.label || ''} · ${dayLabel(date)}`}
+      refreshing={q.refreshing}
+      onRefresh={q.refresh}
+    >
+      <ClassChips classes={classes} value={cls?.key} onChange={setPicked} />
       <HStack gap={8}>
-        <StatTile
-          value={done.length}
-          label="Posted"
-          active={filter === 'posted'}
-          onPress={() => setFilter('posted')}
-        />
-        <StatTile
-          value={missing.length}
-          label="Not yet"
-          active={filter === 'missing'}
-          onPress={() => setFilter('missing')}
-        />
+        <StatTile value={rows.length} label="Posted" active={filter === 'posted'} onPress={() => setFilter('posted')} />
+        <StatTile value={missing.length} label="Not yet" active={filter === 'missing'} onPress={() => setFilter('missing')} />
       </HStack>
-      <Card>
-        {list.map((d, i) => (
-          <ListRow
-            key={d.subject}
-            icon={File}
-            iconTone={d.posted ? 'primary' : 'danger'}
-            title={d.subject}
-            subtitle={`${d.text} · ${d.teacher}`}
-            right={
-              d.posted ? (
-                <Badge label={d.time} tone="success" />
+      <QueryView q={q}>
+        {() =>
+          filter === 'posted' ? (
+            <Card>
+              {rows.length === 0 ? (
+                <Empty text="No diary posted for this class today." />
               ) : (
-                <Badge label="Missing" tone="danger" />
-              )
-            }
-            last={i === list.length - 1}
-          />
-        ))}
-      </Card>
+                rows.map((d, i) => (
+                  <ListRow
+                    key={d.id}
+                    icon={File}
+                    title={subjectNameFor(classes, d.subject_id)}
+                    subtitle={[d.topic, d.homework].filter(Boolean).join(' · ')}
+                    right={<Badge label="Posted" tone="success" />}
+                    last={i === rows.length - 1}
+                  />
+                ))
+              )}
+            </Card>
+          ) : (
+            <Card>
+              {missing.length === 0 ? (
+                <Empty text="All your subjects are posted." />
+              ) : (
+                missing.map((m, i) => (
+                  <ListRow
+                    key={String(m.subjectId)}
+                    icon={File}
+                    iconTone="danger"
+                    title={m.subject}
+                    subtitle="Not posted yet"
+                    right={<Badge label="Missing" tone="danger" />}
+                    last={i === missing.length - 1}
+                  />
+                ))
+              )}
+            </Card>
+          )
+        }
+      </QueryView>
     </Screen>
   );
 }
 
 const s = StyleSheet.create({
-  photos: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  photo: { width: 88 },
-  remove: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  add: {
-    width: 88,
-    height: 78,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderStyle: 'dashed',
-    borderColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 3,
-  },
-  addText: { fontSize: 12.5, fontWeight: '800', color: colors.primaryText },
+  sub: { fontSize: 12.5, color: colors.textMuted, fontWeight: '700' },
 });

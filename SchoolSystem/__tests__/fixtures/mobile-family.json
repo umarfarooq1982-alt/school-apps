@@ -977,6 +977,108 @@
      "phone": "0301-2233445"
     }
    }
+  },
+  "/api/mobile/vouchers/:id": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": {
+    "id": 61,
+    "voucherNo": "V-26-000003",
+    "uuid": "feced6b1-2164-4df6-901c-6a3e2e656078",
+    "month": "2026-11",
+    "title": "Fee 2026-11",
+    "type": "monthly",
+    "issueDate": "2026-11-01",
+    "dueDate": "2026-11-10",
+    "amount": 7225,
+    "paid": 0,
+    "balance": 7225,
+    "status": "unpaid",
+    "qr": "sms:voucher:feced6b1-2164-4df6-901c-6a3e2e656078",
+    "lines": [
+     {
+      "label": "Tuition",
+      "amount": 7500,
+      "discount": 1125
+     },
+     {
+      "label": "Computer",
+      "amount": 1000,
+      "discount": 150
+     }
+    ]
+   }
+  },
+  "/api/mobile/payments/online/:reference": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": {
+    "id": 7,
+    "uuid": "0d3c1e2a-7f00-4f7a-9d2c-1a2b3c4d5e6f",
+    "title": "V-26-000003",
+    "status": "unavailable",
+    "recordDate": "2026-11-03",
+    "voucherId": 61,
+    "studentId": 43,
+    "gateway": "jazzcash",
+    "amount": 7225
+   }
+  },
+  "POST /api/mobile/payments/online": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": {
+    "status": "unavailable",
+    "message": "JazzCash, Easypaisa and 1Link live keys are not enabled on this school yet.",
+    "reference": "0d3c1e2a-7f00-4f7a-9d2c-1a2b3c4d5e6f",
+    "gateways": [
+     {
+      "id": "jazzcash",
+      "name": "JazzCash",
+      "enabled": false
+     },
+     {
+      "id": "easypaisa",
+      "name": "Easypaisa",
+      "enabled": false
+     },
+     {
+      "id": "1link",
+      "name": "1Link",
+      "enabled": false
+     }
+    ],
+    "voucher": {
+     "id": 61,
+     "voucherNo": "V-26-000003",
+     "uuid": "feced6b1-2164-4df6-901c-6a3e2e656078",
+     "month": "2026-11",
+     "title": "Fee 2026-11",
+     "type": "monthly",
+     "issueDate": "2026-11-01",
+     "dueDate": "2026-11-10",
+     "amount": 7225,
+     "paid": 0,
+     "balance": 7225,
+     "status": "unpaid",
+     "qr": "sms:voucher:feced6b1-2164-4df6-901c-6a3e2e656078",
+     "lines": [
+      {
+       "label": "Tuition",
+       "amount": 7500,
+       "discount": 1125
+      },
+      {
+       "label": "Computer",
+       "amount": 1000,
+       "discount": 150
+      }
+     ]
+    }
+   }
   }
  },
  "student": {
@@ -1824,6 +1926,54 @@
      "driver": "Muhammad Aslam",
      "phone": "0301-2233445"
     }
+   }
+  },
+  "/api/mobile/vouchers/:id": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": {
+    "id": 60,
+    "voucherNo": "V-26-000002",
+    "uuid": "8e4e543a-c12d-4e75-8b96-6e2df424343a",
+    "month": "2026-11",
+    "title": "Fee 2026-11",
+    "type": "monthly",
+    "issueDate": "2026-11-01",
+    "dueDate": "2026-11-10",
+    "amount": 7225,
+    "paid": 0,
+    "balance": 7225,
+    "status": "unpaid",
+    "qr": "sms:voucher:8e4e543a-c12d-4e75-8b96-6e2df424343a",
+    "lines": [
+     {
+      "label": "Tuition",
+      "amount": 7500,
+      "discount": 1125
+     },
+     {
+      "label": "Computer",
+      "amount": 1000,
+      "discount": 150
+     }
+    ]
+   }
+  },
+  "/api/mobile/payments/online/:reference": {
+   "status": 200,
+   "success": true,
+   "message": "Success",
+   "data": {
+    "id": 7,
+    "uuid": "0d3c1e2a-7f00-4f7a-9d2c-1a2b3c4d5e6f",
+    "title": "V-26-000002",
+    "status": "unavailable",
+    "recordDate": "2026-11-03",
+    "voucherId": 60,
+    "studentId": 43,
+    "gateway": "jazzcash",
+    "amount": 7225
    }
   }
  }

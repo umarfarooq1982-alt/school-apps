@@ -1,4 +1,6 @@
-// S-04 Promotion wizard, section/campus transfer, school leaving, alumni.
+// S-04 Promotion wizard, section transfer, school leaving, alumni.
+// Live: students, results and dues from /api/web; moves via
+// POST /api/web/students/promote and PUT /api/web/students/{id}.
 import React, { useState } from 'react';
 import { Text, View } from 'react-native';
 import { ArrowLeftRight, Check, DoorOpen, GraduationCap, Users, X } from 'lucide-react-native';
@@ -6,18 +8,40 @@ import { Badge, Button, Card, formatRs as formatDue, InfoBanner, ListRow, Screen
 import { adminStyles as a, KV, ListScreen, PickerField } from '../../../components/admin';
 import { ScreenProps, useNav } from '../../../navigation';
 import { useShared } from '../../../store';
-import { ADMIN_STUDENTS, CAMPUSES, CLASSES, logAudit, requestApproval, useApprovals } from '../../../data/admin';
-import { ALUMNI, Alumnus, PROMOTION_CANDIDATES } from '../../../data/admin-principal';
+import { logAudit, requestApproval, useApprovals } from '../../../data/admin';
+import { invalidate, useApi, useMutation } from '../../../api/hooks';
+import { webA, WebStudent } from '../../../api/webA';
+import { Loading, NoApiBanner } from '../../../components/states';
 import { localId, ReadOnlyBanner, useGuard } from '../owner/shared';
+
+const PASS_PCT = 33;
+
+function useClasses() {
+  const ctx = useApi('adm:context', webA.context);
+  return ctx.data?.classes ?? [];
+}
+
+// Latest exam's result cards, keyed by student id.
+function useLatestResults() {
+  const exams = useApi('adm:mod:exams', () => webA.modules('exams'));
+  const examId = exams.data?.[0]?.id;
+  const res = useApi(examId ? `adm:results:${examId}` : null, () => webA.results(examId ?? 0));
+  const map = new Map((res.data?.cards ?? []).map(c => [String(c.studentId), c]));
+  return { map, exam: res.data?.exam, loading: exams.loading || res.loading };
+}
+
+function useDues() {
+  const q = useApi('adm:defaulters', webA.defaulters);
+  return new Map((q.data ?? []).map(d => [String(d.id), d.amount]));
+}
 
 export function AdminPromotion(_: ScreenProps) {
   const nav = useNav();
-  const [alumni] = useAlumni();
   const items = [
     { route: 'AdminPromoWizard', icon: GraduationCap, title: 'Promotion wizard', sub: 'Year-end: promote or detain, map to new class, carry dues' },
     { route: 'AdminPromoTransfer', icon: ArrowLeftRight, title: 'Section and campus transfer', sub: 'With history and fee adjustment' },
     { route: 'AdminPromoLeaving', icon: DoorOpen, title: 'School leaving', sub: 'Clearance check, leaving certificate, status left' },
-    { route: 'AdminPromoAlumni', icon: Users, title: 'Alumni', sub: `${alumni.length} passed-out and left students` },
+    { route: 'AdminPromoAlumni', icon: Users, title: 'Alumni', sub: 'Passed-out and left students' },
   ];
   return (
     <Screen title="Promotion & transfer">
@@ -31,46 +55,71 @@ export function AdminPromotion(_: ScreenProps) {
   );
 }
 
-export const useAlumni = () => useShared<Alumnus[]>('admin.alumni', ALUMNI);
-
 const STEPS = ['Class', 'Results', 'Decide', 'Map', 'Confirm'];
 
 export function AdminPromoWizard(_: ScreenProps) {
   const { guard } = useGuard();
-  const [, setAlumni] = useAlumni();
-  const [done, setDone] = useShared<string[]>('admin.promoted', []);
+  const classes = useClasses();
   const [step, setStep] = useState(0);
-  const [cls, setCls] = useState('Class 5');
+  const [clsName, setClsName] = useState('');
+  const cls = classes.find(c => c.name === clsName) ?? classes[0];
+  const idx = cls ? classes.indexOf(cls) : -1;
+  const nextCls = idx >= 0 && idx < classes.length - 1 ? classes[idx + 1] : undefined;
+  const next = nextCls ? nextCls.name : 'Passed out (alumni)';
+  const studentsQ = useApi(cls ? `adm:students:class:${cls.id}` : null, () => webA.students({ classId: cls?.id, pageSize: 200, status: 'active' }));
+  const results = useLatestResults();
+  const dueMap = useDues();
   const [decide, setDecide] = useState<Record<string, boolean>>({});
   const [section, setSection] = useState('Same section');
-  const list = PROMOTION_CANDIDATES(cls);
-  const idx = CLASSES.indexOf(cls);
-  const next = idx === CLASSES.length - 1 ? 'Passed out (alumni)' : CLASSES[idx + 1];
+  const list = (studentsQ.data?.items ?? []).filter(s => s.status === 'active').map(s => {
+    const card = results.map.get(s.id);
+    return { ...s, pct: card?.pct ?? null, pass: card ? card.pct >= PASS_PCT : true, due: dueMap.get(s.id) ?? 0 };
+  });
   const promote = (id: string, pass: boolean) => decide[id] ?? pass;
   const promoted = list.filter(s => promote(s.id, s.pass));
   const detained = list.filter(s => !promote(s.id, s.pass));
   const dues = list.reduce((n, s) => n + s.due, 0);
-  const go = (n: number) => {
-    if (n === 1 && done.includes(cls)) {
-      toast(`${cls} is already promoted into 2027-28`);
-      return;
+  const run = useMutation(async () => {
+    const ids = promoted.map(s => s.id);
+    if (!ids.length) {
+      return { updated: 0 };
     }
-    if (n === 1 && !list.length) {
-      toast('No active students in this class');
+    const res = nextCls
+      ? await webA.promote({ studentIds: ids, toClassId: nextCls.id, action: 'promote' })
+      : await webA.promote({ studentIds: ids, action: 'leave' });
+    if (nextCls && section !== 'Same section' && section.length === 1) {
+      for (const id of ids) {
+        await webA.updateStudent(id, { section });
+      }
+    }
+    return res;
+  }, 'Promotion saved');
+  const go = (n: number) => {
+    if (n >= 1 && !list.length) {
+      toast(studentsQ.loading ? 'Loading students…' : 'No active students in this class');
       return;
     }
     setStep(n);
   };
-  const confirm = guard(() => {
-    setDone(d => [...d, cls]);
-    if (next.startsWith('Passed out')) {
-      setAlumni(al => [...promoted.map(s => ({ id: localId('al'), name: s.name, batch: 'Matric 2027', status: 'Passed out' as const, contact: '—', now: '—' })), ...al]);
+  const confirm = guard(async () => {
+    if (!cls) {
+      return;
     }
-    logAudit('Promotion', `${cls}: ${promoted.length} promoted to ${next} (${section}), ${detained.length} detained, dues Rs. ${dues.toLocaleString('en-US')} carried forward`);
-    toast('Promotion done for session 2027-28');
-    setStep(0);
-    setDecide({});
+    const res = await run.run();
+    if (res !== undefined) {
+      logAudit('Promotion', `${cls.name}: ${promoted.length} → ${next} (${section}), ${detained.length} detained, dues ${formatDue(dues)} carried forward`);
+      invalidate('adm:students');
+      setStep(0);
+      setDecide({});
+    }
   });
+  if (!cls) {
+    return (
+      <Screen title="Promotion wizard">
+        <Loading />
+      </Screen>
+    );
+  }
   return (
     <Screen
       title="Promotion wizard"
@@ -81,7 +130,7 @@ export function AdminPromoWizard(_: ScreenProps) {
           {step < STEPS.length - 1 ? (
             <Button label="Next" onPress={() => go(step + 1)} style={a.flex} />
           ) : (
-            <Button label="Confirm promotion" onPress={confirm} style={a.flex} />
+            <Button label="Confirm promotion" onPress={confirm} loading={run.busy} style={a.flex} />
           )}
         </View>
       }
@@ -90,20 +139,26 @@ export function AdminPromoWizard(_: ScreenProps) {
       <Segmented options={STEPS} value={STEPS[step]} onChange={v => go(STEPS.indexOf(v))} />
       {step === 0 ? (
         <>
-          <PickerField label="Class" value={cls} options={CLASSES.slice(3)} onChange={v => { setCls(v); setDecide({}); }} />
+          <PickerField label="Class" value={cls.name} options={classes.map(c => c.name)} onChange={v => { setClsName(v); setDecide({}); }} />
           <Card>
-            <KV k="From session" v="2026-27" />
-            <KV k="Into session" v="2027-28" />
-            <KV k="Active students" v={String(list.length)} />
+            <KV k="Active students" v={studentsQ.loading ? '…' : String(list.length)} />
+            <KV k="Results from" v={results.exam?.name ?? (results.loading ? '…' : 'No exam yet')} />
             <KV k="Next class" v={next} last />
           </Card>
-          {done.includes(cls) ? <InfoBanner tone="success" icon={Check} text={`${cls} is already promoted.`} /> : null}
+          <InfoBanner text="Dues stay on each student's vouchers and carry forward automatically." />
         </>
       ) : null}
       {step === 1 ? (
-        <Card title={`Final results · ${list.filter(s => s.pass).length} pass, ${list.filter(s => !s.pass).length} fail`}>
+        <Card title={`${results.exam?.name ?? 'Results'} · ${list.filter(s => s.pass).length} pass, ${list.filter(s => !s.pass).length} fail`}>
           {list.map((s, i) => (
-            <ListRow key={s.id} avatar={s.name} title={s.name} subtitle={`${s.gr} · ${s.section} · ${s.result}%`} right={<Badge label={s.pass ? 'Pass' : 'Fail'} tone={s.pass ? 'success' : 'danger'} />} last={i === list.length - 1} />
+            <ListRow
+              key={s.id}
+              avatar={s.name}
+              title={s.name}
+              subtitle={`${s.grNo} · ${s.section} · ${s.pct === null ? 'no result' : `${s.pct}%`}`}
+              right={<Badge label={s.pass ? 'Pass' : 'Fail'} tone={s.pass ? 'success' : 'danger'} />}
+              last={i === list.length - 1}
+            />
           ))}
         </Card>
       ) : null}
@@ -113,7 +168,7 @@ export function AdminPromoWizard(_: ScreenProps) {
             <ListRow
               key={s.id}
               title={s.name}
-              subtitle={`${s.result}% · ${s.pass ? 'passed' : 'failed'}`}
+              subtitle={`${s.pct === null ? 'no result' : `${s.pct}%`} · ${s.pass ? 'passed' : 'failed'}`}
               right={
                 <View style={a.row}>
                   <Text style={a.small}>{promote(s.id, s.pass) ? 'Promote' : 'Detain'}</Text>
@@ -129,15 +184,15 @@ export function AdminPromoWizard(_: ScreenProps) {
         <>
           <Card>
             <KV k="Promoted students go to" v={next} />
-            <KV k="Detained students stay in" v={cls} last />
+            <KV k="Detained students stay in" v={cls.name} last />
           </Card>
-          <PickerField label="New section" value={section} options={['Same section', 'A', 'B', 'C', 'Balance by merit']} onChange={setSection} />
+          <PickerField label="New section" value={section} options={['Same section', ...(nextCls?.sections ?? ['A'])]} onChange={setSection} />
         </>
       ) : null}
       {step === 4 ? (
         <Card title="Summary">
           <KV k="Promoted" v={`${promoted.length} → ${next}`} />
-          <KV k="Detained" v={`${detained.length} stay in ${cls}`} />
+          <KV k="Detained" v={`${detained.length} stay in ${cls.name}`} />
           <KV k="Section" v={section} />
           <KV k="Dues carried forward" v={formatDue(dues)} last />
         </Card>
@@ -149,30 +204,33 @@ export function AdminPromoWizard(_: ScreenProps) {
 type Move = { id: string; student: string; kind: 'Section' | 'Campus'; from: string; to: string; when: string; fee: string };
 
 export function AdminPromoTransfer(_: ScreenProps) {
-  const [list, setList] = useShared<Move[]>('admin.sectionMoves', [
-    { id: 'mv1', student: 'Hira Saleem (GR-MC-0045)', kind: 'Section', from: 'Class 5-B', to: 'Class 5-A', when: '2 Oct', fee: 'No change' },
-  ]);
+  // The server keeps no transfer history, so the history is kept on the phone.
+  const [list, setList] = useShared<Move[]>('admin.sectionMoves', []);
   const { guard } = useGuard();
+  const classes = useClasses();
+  const studentsQ = useApi('adm:students:all', () => webA.students({ pageSize: 200 }));
   const [kind, setKind] = useState<'Section' | 'Campus'>('Section');
   const [student, setStudent] = useState('');
   const [to, setTo] = useState('');
-  const students = ADMIN_STUDENTS.filter(s => s.status === 'Active').slice(0, 30);
-  const st = students.find(s => `${s.name} (${s.gr})` === student);
-  const options = kind === 'Section'
-    ? ['A', 'B', 'C'].filter(x => x !== st?.section).map(x => `${st?.className ?? 'Class'}-${x}`)
-    : CAMPUSES.filter(c => c.id !== st?.campus).map(c => c.name);
-  const save = guard(() => {
+  const students = (studentsQ.data?.items ?? []).filter(s => s.status === 'active');
+  const st = students.find(s => `${s.name} (${s.grNo})` === student);
+  const sections = classes.find(c => c.id === st?.classId)?.sections ?? [];
+  const options = kind === 'Section' ? sections.filter(x => x !== st?.section).map(x => `${st?.className ?? 'Class'}-${x}`) : [];
+  const run = useMutation((s: WebStudent, section: string) => webA.updateStudent(s.id, { section }), 'Transfer saved');
+  const save = guard(async () => {
     if (!st || !to) {
       toast('Choose the student and where to move');
       return;
     }
-    const from = kind === 'Section' ? `${st.className}-${st.section}` : CAMPUSES.find(c => c.id === st.campus)?.name ?? '';
-    const fee = kind === 'Campus' ? 'Next voucher uses the new campus fee structure' : 'No change';
-    setList(l => [{ id: localId('mv'), student, kind, from, to, when: 'Today', fee }, ...l]);
-    logAudit('Transfer', `${student}: ${kind} ${from} → ${to}. ${fee}`);
-    toast('Transfer saved with history');
-    setStudent('');
-    setTo('');
+    const section = to.split('-').pop() ?? '';
+    const from = `${st.className}-${st.section}`;
+    if ((await run.run(st, section)) !== undefined) {
+      setList(l => [{ id: localId('mv'), student, kind, from, to, when: 'Today', fee: 'No change' }, ...l]);
+      logAudit('Transfer', `${student}: Section ${from} → ${to}`);
+      invalidate('adm:students');
+      setStudent('');
+      setTo('');
+    }
   });
   return (
     <ListScreen
@@ -181,16 +239,21 @@ export function AdminPromoTransfer(_: ScreenProps) {
       keyOf={m => m.id}
       searchText={m => `${m.student} ${m.from} ${m.to}`}
       filters={[{ label: 'Type', options: ['All', 'Section', 'Campus'], get: m => m.kind }]}
+      empty="No transfers made from this phone yet"
       header={
         <>
           <ReadOnlyBanner />
           <Card title="New transfer">
             <Segmented options={['Section', 'Campus']} value={kind} onChange={v => { setKind(v as 'Section' | 'Campus'); setTo(''); }} />
-            <View style={a.flex}>
-              <PickerField label="Student" value={student} options={students.map(s => `${s.name} (${s.gr})`)} onChange={v => { setStudent(v); setTo(''); }} />
-              <PickerField label={kind === 'Section' ? 'New section' : 'New campus'} value={to} options={options} onChange={setTo} />
-            </View>
-            <Button label="Transfer" icon={ArrowLeftRight} onPress={save} />
+            {kind === 'Campus' ? (
+              <NoApiBanner what="Moving a student to another campus (use Campuses → Transfers to record it)" />
+            ) : (
+              <View style={a.flex}>
+                <PickerField label="Student" value={student} options={students.map(s => `${s.name} (${s.grNo})`)} onChange={v => { setStudent(v); setTo(''); }} />
+                <PickerField label="New section" value={to} options={options} onChange={setTo} />
+                <Button label="Transfer" icon={ArrowLeftRight} onPress={save} loading={run.busy} />
+              </View>
+            )}
           </Card>
           <Text style={a.section}>History</Text>
         </>
@@ -202,33 +265,40 @@ export function AdminPromoTransfer(_: ScreenProps) {
   );
 }
 
-// Dummy clearance status for a student.
-function clearance(id: string, due: number) {
-  const n = Number(id.replace(/\D/g, '')) || 0;
-  return [
-    { what: 'Fee', ok: due === 0, note: due ? `${formatDue(due)} due` : 'No dues' },
-    { what: 'Library', ok: n % 5 !== 0, note: n % 5 !== 0 ? 'No books issued' : '1 book not returned' },
-    { what: 'Store', ok: n % 7 !== 0, note: n % 7 !== 0 ? 'No dues' : 'Uniform Rs. 1,200 unpaid' },
-  ];
-}
-
 export function AdminPromoLeaving(_: ScreenProps) {
   const { guard } = useGuard();
-  const [, setAlumni] = useAlumni();
-  const [left, setLeft] = useShared<string[]>('admin.leftStudents', []);
   // studentId -> approval request id. Issuing with dues needs that request to
   // be Approved in the Approvals inbox (S-04).
   const [requested, setRequested] = useShared<Record<string, string>>('admin.leavingRequested', {});
   const [approvals] = useApprovals();
-  const students = ADMIN_STUDENTS.filter(s => s.status === 'Active' && !left.includes(s.id)).slice(0, 30);
-  const [pick, setPick] = useState(students[1] ? `${students[1].name} (${students[1].gr})` : '');
-  const st = students.find(s => `${s.name} (${s.gr})` === pick);
-  const checks = st ? clearance(st.id, st.due) : [];
+  const studentsQ = useApi('adm:students:all', () => webA.students({ pageSize: 200 }));
+  const students = (studentsQ.data?.items ?? []).filter(s => s.status === 'active');
+  const [pick, setPick] = useState('');
+  const st = students.find(s => `${s.name} (${s.grNo})` === pick);
+  const detail = useApi(st ? `adm:student:${st.id}` : null, () => webA.student(st?.id ?? ''));
+  const library = useApi('adm:library:issues', () => webA.libraryIssues());
+  const due = detail.data?.dues ?? 0;
+  const books = (library.data ?? []).filter(b => !b.returned_on && st && String(b.borrower ?? '').toLowerCase().includes(st.name.toLowerCase())).length;
+  const checks = st
+    ? [
+        { what: 'Fee', ok: due === 0, note: detail.loading ? 'Checking…' : due ? `${formatDue(due)} due` : 'No dues' },
+        { what: 'Library', ok: books === 0, note: books ? `${books} book(s) not returned` : 'No books issued' },
+        { what: 'Store', ok: true, note: 'No store API yet — check at the counter' },
+      ]
+    : [];
   const clear = checks.every(c => c.ok);
   const request = st ? approvals.find(x => x.id === requested[st.id]) : undefined;
-  const issue = guard(() => {
+  const run = useMutation(async (s: WebStudent) => {
+    await webA.promote({ studentIds: [s.id], action: 'leave' });
+    return webA.printCertificate(s.id, 'leaving');
+  }, 'Leaving certificate issued. Status set to Left.');
+  const issue = guard(async () => {
     if (!st) {
       toast('Choose a student');
+      return;
+    }
+    if (detail.loading) {
+      toast('Checking clearance…');
       return;
     }
     if (!clear && request?.status !== 'Approved') {
@@ -241,11 +311,11 @@ export function AdminPromoLeaving(_: ScreenProps) {
       );
       return;
     }
-    setLeft(l => [...l, st.id]);
-    setAlumni(al => [{ id: localId('al'), name: st.name, batch: `${st.className} · 2026`, status: 'Left', contact: st.mobile, now: '—' }, ...al]);
-    logAudit('School leaving', `${st.name} (${st.gr}) left. Leaving certificate issued. Status set to Left.`);
-    toast('Leaving certificate issued. Status set to Left.');
-    setPick('');
+    if ((await run.run(st)) !== undefined) {
+      logAudit('School leaving', `${st.name} (${st.grNo}) left. Leaving certificate issued. Status set to Left.`);
+      invalidate('adm:students');
+      setPick('');
+    }
   });
   const ask = guard(() => {
     if (!st) {
@@ -258,7 +328,8 @@ export function AdminPromoLeaving(_: ScreenProps) {
   return (
     <Screen title="School leaving" subtitle="Clearance check before the leaving certificate">
       <ReadOnlyBanner />
-      <PickerField label="Student" value={pick} options={students.map(s => `${s.name} (${s.gr})`)} onChange={setPick} />
+      {studentsQ.error ? <InfoBanner tone="danger" text={studentsQ.error} /> : null}
+      <PickerField label="Student" value={pick} options={students.map(s => `${s.name} (${s.grNo})`)} onChange={setPick} />
       {st ? (
         <>
           <Card title="Clearance">
@@ -276,7 +347,7 @@ export function AdminPromoLeaving(_: ScreenProps) {
             />
           ) : null}
           {!clear && (!request || request.status === 'Rejected') ? <Button label="Ask approval to issue with dues" variant="outline" onPress={ask} /> : null}
-          <Button label="Issue leaving certificate" icon={DoorOpen} onPress={issue} />
+          <Button label="Issue leaving certificate" icon={DoorOpen} onPress={issue} loading={run.busy} />
         </>
       ) : null}
     </Screen>
@@ -284,17 +355,18 @@ export function AdminPromoLeaving(_: ScreenProps) {
 }
 
 export function AdminPromoAlumni(_: ScreenProps) {
-  const [list] = useAlumni();
+  const left = useApi('adm:students:left', () => webA.students({ status: 'left', pageSize: 200 }));
+  const list = left.data?.items ?? [];
   return (
     <ListScreen
       title="Alumni"
       subtitle="Passed-out and left students"
       items={list}
       keyOf={x => x.id}
-      searchText={x => `${x.name} ${x.batch} ${x.now}`}
-      filters={[{ label: 'Status', options: ['All', 'Passed out', 'Left'], get: x => x.status }]}
+      searchText={x => `${x.name} ${x.grNo} ${x.className}`}
+      empty={left.loading ? 'Loading…' : left.error ?? 'No alumni yet'}
       renderItem={(x, last) => (
-        <ListRow avatar={x.name} title={x.name} subtitle={`${x.batch} · ${x.contact}\nNow: ${x.now}`} right={<Badge label={x.status} tone={x.status === 'Left' ? 'neutral' : 'success'} />} last={last} />
+        <ListRow avatar={x.name} title={x.name} subtitle={`${x.grNo} · ${x.className}-${x.section} · ${x.mobile ?? '—'}`} right={<Badge label="Left" tone="neutral" />} last={last} />
       )}
     />
   );

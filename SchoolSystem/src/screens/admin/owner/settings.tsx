@@ -1,5 +1,5 @@
 // S-13 school settings, templates and integrations.
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image as ImageIcon, MessageSquare, Plug, Plus, X } from 'lucide-react-native';
 import {
@@ -23,6 +23,9 @@ import { logAudit, SchoolRules, STAFF_ROLES, useRules } from '../../../data/admi
 import { Integration, INTEGRATIONS, TemplateDef, TEMPLATES } from '../../../data/admin-owner';
 import { colors, radius } from '../../../theme';
 import { ReadOnlyBanner, useGuard } from './shared';
+import { useApi, useMutation } from '../../../api/hooks';
+import { webA } from '../../../api/webA';
+import { NoApiBanner } from '../../../components/states';
 
 // ---------- School settings ----------
 
@@ -64,18 +67,51 @@ export function AdminSettings(_: ScreenProps) {
   const [p, setP] = useState(profile);
   const [r, setR] = useState<SchoolRules>(rules);
   const [tab, setTab] = useState('Profile');
+  const ctx = useApi('adm:context', webA.context);
+  const loaded = useRef(false);
+  const lastChains = useRef('');
+  const saver = useMutation(webA.saveSettings);
+  // Server settings (school.settings JSON) win over the phone's copy.
+  useEffect(() => {
+    const srv = ctx.data?.school;
+    if (!srv || loaded.current) {
+      return;
+    }
+    loaded.current = true;
+    const st = srv.settings as Record<string, unknown>;
+    const pick = <T,>(k: string, d: T): T => (st[k] === undefined || st[k] === null || st[k] === '' ? d : (st[k] as T));
+    setP(x => ({ ...x, name: String(pick('schoolName', srv.name)), short: String(pick('shortName', x.short)), color: String(pick('brandName', x.color)), grFormat: String(pick('grFormat', x.grFormat)), voucherFormat: String(pick('voucherFormat', x.voucherFormat)), receiptFormat: String(pick('receiptFormat', x.receiptFormat)) }));
+    setR(x => {
+      const next = { ...x };
+      (Object.keys(x) as Array<keyof SchoolRules>).forEach(k => {
+        (next as Record<string, unknown>)[k] = pick(k, x[k]);
+      });
+      next.dueDay = Number(pick('dueDay', x.dueDay)) || x.dueDay;
+      return next;
+    });
+    if (Array.isArray(st.approvalChains)) {
+      lastChains.current = JSON.stringify(st.approvalChains);
+      setChains(st.approvalChains as Chain[]);
+    } else {
+      lastChains.current = JSON.stringify(chains);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ctx.data, setChains]);
 
   const num = (k: keyof SchoolRules) => (v: string) => setR(x => ({ ...x, [k]: Number(v.replace(/\D/g, '')) || 0 }));
   const txt = (k: keyof SchoolRules) => (v: string) => setR(x => ({ ...x, [k]: v }));
   const flag = (k: keyof SchoolRules) => (v: boolean) => setR(x => ({ ...x, [k]: v }));
 
-  const saveProfile = guard(() => {
+  const saveProfile = guard(async () => {
     const changed = (Object.keys(p) as Array<keyof Profile>).filter(k => p[k] !== profile[k]);
+    if ((await saver.run({ schoolName: p.name, shortName: p.short, brandName: p.color, brandColor: COLORS[p.color], grFormat: p.grFormat, voucherFormat: p.voucherFormat, receiptFormat: p.receiptFormat })) === undefined) {
+      return;
+    }
     setProfile(p);
     logAudit('Settings', changed.length ? changed.map(k => `${k}: ${profile[k]} → ${p[k]}`).join('; ') : 'Profile saved (no change)');
     toast('Profile saved');
   });
-  const saveRules = guard(() => {
+  const saveRules = guard(async () => {
     if (r.lateFineCap < r.lateFinePerDay) {
       toast('Fine cap must be at least the daily fine');
       return;
@@ -85,10 +121,25 @@ export function AdminSettings(_: ScreenProps) {
       return;
     }
     const changed = (Object.keys(r) as Array<keyof SchoolRules>).filter(k => r[k] !== rules[k]);
+    if ((await saver.run({ ...r })) === undefined) {
+      return;
+    }
     setRules(r);
     logAudit('Settings', changed.length ? changed.map(k => `${k}: ${String(rules[k])} → ${String(r[k])}`).join('; ') : 'Rules saved (no change)');
     toast('Rules saved. They apply without any code change.');
   });
+  // Approval chains are stored in the school settings JSON.
+  const pushChains = (next: Chain[]) => {
+    saver.run({ approvalChains: next });
+  };
+  useEffect(() => {
+    const json = JSON.stringify(chains);
+    if (loaded.current && ctx.data && json !== lastChains.current) {
+      lastChains.current = json;
+      pushChains(chains);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chains]);
   const setStep = (ci: number, si: number, v: string) =>
     guard(() => {
       setChains(cs => cs.map((c, i) => (i === ci ? { ...c, steps: c.steps.map((x, j) => (j === si ? v : x)) } : c)));
@@ -110,8 +161,10 @@ export function AdminSettings(_: ScreenProps) {
     })();
 
   return (
-    <Screen title="School settings" subtitle="Profile, formats, rules and approval chains">
+    <Screen title="School settings" subtitle="Profile, formats, rules and approval chains" refreshing={ctx.refreshing} onRefresh={ctx.refresh}>
       <ReadOnlyBanner />
+      {ctx.error ? <InfoBanner tone="danger" text={ctx.error} /> : null}
+      <InfoBanner text="Saved to the school server (school settings). The server applies the due day and attendance cut-off; the other rules are enforced in the apps." />
       <Segmented options={['Profile', 'Rules', 'Approvals']} value={tab} onChange={setTab} />
       {tab === 'Profile' ? (
         <>
@@ -123,7 +176,7 @@ export function AdminSettings(_: ScreenProps) {
             <Text style={a.bold}>Logo</Text>
             <View style={a.row}>
               <Placeholder icon={ImageIcon} label="logo.png" height={64} style={s.logo} />
-              <Button label="Change logo" variant="outline" onPress={() => toast('Logo picker (demo)')} />
+              <Button label="Change logo" variant="outline" onPress={() => toast('Logo upload is done on the web panel (no app API yet)')} />
             </View>
             <View style={s.gap} />
             <Text style={a.bold}>Brand color</Text>
@@ -145,7 +198,7 @@ export function AdminSettings(_: ScreenProps) {
             <Field label="Receipt No." value={p.receiptFormat} onChangeText={v => setP(x => ({ ...x, receiptFormat: v }))} />
             <Text style={a.small}>Next: {preview(p.receiptFormat, 612)}</Text>
           </Card>
-          <Button label="Save profile and formats" onPress={saveProfile} />
+          <Button label="Save profile and formats" onPress={saveProfile} loading={saver.busy} />
         </>
       ) : null}
       {tab === 'Rules' ? (
@@ -173,7 +226,7 @@ export function AdminSettings(_: ScreenProps) {
             <RuleToggle label="Period-wise attendance" value={r.periodAttendance} onChange={flag('periodAttendance')} />
             <RuleToggle label="Admission final only after admission fee" value={r.admissionNeedsFee} onChange={flag('admissionNeedsFee')} last />
           </Card>
-          <Button label="Save rules" onPress={saveRules} />
+          <Button label="Save rules" onPress={saveRules} loading={saver.busy} />
         </>
       ) : null}
       {tab === 'Approvals' ? (
@@ -244,7 +297,12 @@ export function AdminTemplates(_: ScreenProps) {
       keyOf={t => t.id}
       searchText={t => `${t.name} ${t.kind}`}
       filters={[{ label: 'Kind', options: ['All', 'Voucher', 'Receipt', 'Report card', 'Certificate', 'ID card', 'Message'], get: t => t.kind }]}
-      header={<ReadOnlyBanner />}
+      header={
+        <>
+          <ReadOnlyBanner />
+          <NoApiBanner what="Templates" />
+        </>
+      }
       renderItem={(t, last) => (
         <ListRow
           icon={MessageSquare}
@@ -306,6 +364,7 @@ export const useIntegrations = () => useShared<Integration[]>('admin.integration
 export function AdminIntegrations(_: ScreenProps) {
   const nav = useNav();
   const [list] = useIntegrations();
+  const gw = useApi('adm:outbox-status', webA.outboxStatus);
   return (
     <ListScreen
       title="Integrations"
@@ -317,10 +376,12 @@ export function AdminIntegrations(_: ScreenProps) {
       header={
         <>
           <ReadOnlyBanner />
-          <Card>
-            <KV k="SMS credit balance" v="18,420 SMS" />
-            <KV k="WhatsApp messages this month" v="6,112" last />
+          <Card title="Gateway status (server)">
+            {gw.error ? <InfoBanner tone="danger" text={gw.error} /> : null}
+            <KV k="SMS" v={gw.data ? (gw.data.sms ? `On · ${gw.data.smsProvider ?? ''}` : 'Not set up') : '…'} />
+            <KV k="WhatsApp" v={gw.data ? (gw.data.whatsapp ? `On · ${gw.data.whatsappProvider ?? ''}` : 'Not set up') : '…'} last />
           </Card>
+          <NoApiBanner what="Gateway keys, payment gateway and biometric settings" />
         </>
       }
       renderItem={(i, last) => (

@@ -1,19 +1,9 @@
-import React, { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import {
-  Check,
-  Flag,
-  Heart,
-  Paperclip,
-  Plus,
-  Search,
-  Star,
-  X,
-} from 'lucide-react-native';
+import React, { useMemo, useState } from 'react';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Flag, HeartPulse, Paperclip, Plus, Search, Star, X } from 'lucide-react-native';
 import {
   Avatar,
   Badge,
-  Body,
   Button,
   Card,
   Chips,
@@ -22,382 +12,345 @@ import {
   IconButton,
   InfoBanner,
   ListRow,
-  Muted,
   Screen,
   Segmented,
   StatTile,
   toast,
   Toggle,
 } from '../../components/ui';
+import { Empty, QueryView } from '../../components/states';
 import { colors } from '../../theme';
 import { useNav, useParam } from '../../navigation';
 import { useI18n } from '../../i18n';
-import { CLASS_STUDENTS, findStudent, STUDENTS_5A } from '../../data/teacher';
-import { newId, useBehavior, useSickBay, useStudentLeaves } from './state';
+import { useApi, useMutation } from '../../api/hooks';
+import { RecordDto, StudentDto, teacherApi } from '../../api/mobile';
+import { cap, dayLabel, leaveTone } from './common';
 
-const CLASS_KEYS = Object.keys(CLASS_STUDENTS);
+function useGroups() {
+  return useApi('teacher.students', teacherApi.students);
+}
 
-const fmtPoints = (n: number) => (n > 0 ? `+${n}` : `${n}`);
+const groupLabel = (g: { students: StudentDto[]; classId: number; section: string }) =>
+  `${g.students.find(st => st.classId === g.classId)?.className || `Class ${g.classId}`}-${g.section}`;
 
-// T15
+function pct(marks: number, max: number) {
+  return max ? Math.round((marks / max) * 100) : 0;
+}
+
+// T15: students of my classes.
 export function TeacherStudents() {
   const nav = useNav();
-  const [cls, setCls] = useState(CLASS_KEYS[0]);
-  const [searching, setSearching] = useState(false);
-  const [q, setQ] = useState('');
-  const list = CLASS_STUDENTS[cls].filter(s =>
-    s.name.toLowerCase().includes(q.trim().toLowerCase()),
+  const { t } = useI18n();
+  const q = useGroups();
+  const groups = q.data || [];
+  const [picked, setPicked] = useState('');
+  const [search, setSearch] = useState(false);
+  const [text, setText] = useState('');
+  const group = groups.find(g => groupLabel(g) === picked) || groups[0];
+  const list = (group?.students || []).filter(st =>
+    `${st.name} ${st.grNo}`.toLowerCase().includes(text.trim().toLowerCase()),
   );
   return (
     <Screen
       title="My students"
-      subtitle={`Class ${cls.split(' ')[0]} · ${CLASS_STUDENTS[cls].length}`}
-      right={
-        <IconButton
-          icon={searching ? X : Search}
-          onPress={() => {
-            setSearching(v => !v);
-            setQ('');
-          }}
-        />
-      }
+      subtitle={group ? `${groupLabel(group)} · ${group.students.length}` : undefined}
+      right={<IconButton icon={search ? X : Search} onPress={() => setSearch(v => !v)} />}
+      refreshing={q.refreshing}
+      onRefresh={q.refresh}
     >
-      {searching ? (
-        <Field
-          icon={Search}
-          value={q}
-          onChangeText={setQ}
-          placeholder="Search by name"
-          autoFocus
-        />
-      ) : null}
-      <Chips options={CLASS_KEYS} value={cls} onChange={setCls} />
-      <Card>
-        {list.length === 0 ? <Muted>No student matches “{q}”.</Muted> : null}
-        {list.map((st, i) => {
-          let badge: React.ReactNode = null;
-          if (st.health) {
-            badge = <Badge label={st.health} tone="danger" />;
-          } else if (st.att < 85) {
-            badge = <Badge label="Att low" tone="danger" />;
-          }
-          return (
-            <ListRow
-              key={st.id}
-              avatar={st.name}
-              title={st.name}
-              subtitle={`Att ${st.att}% · Mid-term ${st.midterm}% ${st.grade}${
-                st.behavior ? ` · ${fmtPoints(st.behavior)}` : ''
-              }`}
-              right={badge}
-              onPress={() => nav.push('TeacherStudentProfile', { id: st.id })}
-              last={i === list.length - 1}
-            />
-          );
-        })}
-      </Card>
+      <QueryView q={q} isEmpty={d => d.length === 0} emptyText="No class is assigned to you yet.">
+        {() => (
+          <>
+            {search ? <Field icon={Search} value={text} onChangeText={setText} placeholder={t('Search by name or GR No.')} autoFocus /> : null}
+            {groups.length > 1 ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <Chips style={s.noWrap} options={groups.map(groupLabel)} value={group ? groupLabel(group) : ''} onChange={setPicked} />
+              </ScrollView>
+            ) : null}
+            <Card>
+              {list.length === 0 ? (
+                <Empty text="No student matches." />
+              ) : (
+                list.map((st, i) => (
+                  <ListRow
+                    key={st.id}
+                    avatar={st.name}
+                    title={st.name}
+                    subtitle={`${st.grNo}${st.rollNo ? ` · Roll ${st.rollNo}` : ''}`}
+                    chevron
+                    onPress={() => nav.push('TeacherStudentProfile', { id: st.id })}
+                    last={i === list.length - 1}
+                  />
+                ))
+              )}
+            </Card>
+          </>
+        )}
+      </QueryView>
     </Screen>
   );
 }
 
-// T16
+const isPositive = (r: RecordDto) => Number(r.points || 0) > 0;
+const kindOf = (r: RecordDto) => String(r.kind || r.status || 'behavior');
+
+// T16: one student.
 export function TeacherStudentProfile() {
   const nav = useNav();
-  const id = useParam('id', 's9');
-  const st = findStudent(id);
-  const [records] = useBehavior();
-  const notes = records.filter(r => r.name === st.name);
-  const points = notes.reduce((a, r) => a + r.points, 0);
-  const subjects = [
-    { name: 'English', marks: Math.min(100, st.midterm + 4) },
-    { name: 'Mathematics', marks: Math.max(0, st.midterm - 1) },
-    { name: 'Science', marks: Math.max(0, st.midterm - 3) },
-  ];
-  const grade = (m: number) =>
-    m >= 90 ? 'A+' : m >= 80 ? 'A' : m >= 70 ? 'B' : m >= 60 ? 'C' : 'D';
+  const id = Number(useParam('id', 0));
+  const q = useApi(id ? `teacher.student.${id}` : null, () => teacherApi.student(id));
+  if (!id) {
+    return (
+      <Screen title="Student">
+        <Empty text="Open a student from My students." />
+      </Screen>
+    );
+  }
   return (
-    <Screen title={st.name} subtitle={`${st.gr} · Class 5-A · Roll ${st.roll}`}>
-      {st.health ? (
-        <InfoBanner
-          tone="danger"
-          icon={Heart}
-          text={`Health alert: ${st.health.toLowerCase()}. Blood group ${st.bloodGroup}. Emergency ${st.emergency}.`}
-        />
-      ) : (
-        <InfoBanner
-          icon={Heart}
-          text={`No health alerts. Blood group ${st.bloodGroup}. Emergency ${st.emergency}.`}
-        />
-      )}
-      <HStack gap={8}>
-        <StatTile value={`${st.att}%`} label="Attendance" />
-        <StatTile value={`${st.midterm}%`} label="Mid-term" />
-        <StatTile value={fmtPoints(notes.length ? points : st.behavior)} label="Behavior" />
-      </HStack>
-      <Card title="Mid-term result">
-        {subjects.map((x, i) => (
-          <ListRow
-            key={x.name}
-            title={x.name}
-            subtitle={String(x.marks)}
-            right={<Badge label={grade(x.marks)} tone="success" />}
-            last={i === subjects.length - 1}
-          />
-        ))}
-      </Card>
-      <Card
-        title="Behavior notes"
-        action={{
-          label: 'Add',
-          onPress: () => nav.push('TeacherBehavior', { student: st.name }),
+    <Screen
+      title={q.data?.student.name || 'Student'}
+      subtitle={q.data ? `${q.data.student.grNo} · ${q.data.student.className}-${q.data.student.section}` : undefined}
+      refreshing={q.refreshing}
+      onRefresh={q.refresh}
+    >
+      <QueryView q={q}>
+        {d => {
+          const counted = d.attendance.filter(a => a.mark !== '—');
+          const present = counted.filter(a => a.mark === 'P' || a.mark === 'L').length;
+          const att = counted.length ? Math.round((present / counted.length) * 100) : 0;
+          const total = d.results.reduce((n, r) => n + r.marks, 0);
+          const max = d.results.reduce((n, r) => n + r.max, 0);
+          const points = d.health.reduce((n, r) => n + Number(r.points || 0), 0);
+          const alerts = d.health.filter(r => kindOf(r) === 'sickbay' || kindOf(r) === 'health');
+          return (
+            <>
+              {alerts.length ? (
+                <InfoBanner tone="danger" icon={HeartPulse} text={`Health: ${alerts.map(a => a.note || a.title).join(' · ')}`} />
+              ) : null}
+              <HStack gap={8}>
+                <StatTile value={counted.length ? `${att}%` : '—'} label="Attendance" />
+                <StatTile value={max ? `${pct(total, max)}%` : '—'} label="Results" />
+                <StatTile value={points > 0 ? `+${points}` : String(points)} label="Behavior" />
+              </HStack>
+              <Card title="Results">
+                {d.results.length === 0 ? (
+                  <Empty text="No marks entered yet." />
+                ) : (
+                  d.results.map((r, i) => (
+                    <ListRow
+                      key={`${r.subject}-${i}`}
+                      title={r.subject || 'Subject'}
+                      subtitle={`${r.marks} / ${r.max}`}
+                      right={<Badge label={`${pct(r.marks, r.max)}%`} tone="success" />}
+                      last={i === d.results.length - 1}
+                    />
+                  ))
+                )}
+              </Card>
+              <Card title="Behavior and health" action={{ label: 'Add', onPress: () => nav.push('TeacherBehavior', { studentId: d.student.id }) }}>
+                {d.health.length === 0 ? (
+                  <Empty text="No notes yet." />
+                ) : (
+                  d.health.map((r, i) => (
+                    <ListRow
+                      key={r.id}
+                      icon={kindOf(r) === 'sickbay' ? HeartPulse : isPositive(r) ? Star : Flag}
+                      iconTone={isPositive(r) ? 'primary' : 'danger'}
+                      title={String(r.note || r.title)}
+                      subtitle={`${dayLabel(r.recordDate)} · ${cap(kindOf(r))}${r.points ? ` · ${Number(r.points) > 0 ? '+' : ''}${r.points}` : ''}`}
+                      last={i === d.health.length - 1}
+                    />
+                  ))
+                )}
+              </Card>
+              <Button label="Add behavior note" variant="outline" icon={Plus} onPress={() => nav.push('TeacherBehavior', { studentId: d.student.id })} />
+            </>
+          );
         }}
-      >
-        {notes.length === 0 ? <Muted>No notes yet.</Muted> : null}
-        {notes.map((r, i) => (
-          <ListRow
-            key={r.id}
-            icon={r.points > 0 ? Star : Flag}
-            title={r.what}
-            subtitle={`${r.date} · ${r.kind} ${fmtPoints(r.points)}`}
-            last={i === notes.length - 1}
-          />
-        ))}
-      </Card>
-      <Button
-        label="Add behavior note"
-        variant="outline"
-        icon={Plus}
-        onPress={() => nav.push('TeacherBehavior', { student: st.name })}
-      />
+      </QueryView>
     </Screen>
   );
 }
 
-const KIND_TONE = {
-  Positive: 'success',
-  Incident: 'danger',
-  Warning: 'warn',
-} as const;
+const KINDS = ['Positive', 'Incident', 'Warning'];
 
-// T17
+// T17: discipline records and sick-bay log; saved with /teacher/health.
 export function TeacherBehavior() {
   const { t } = useI18n();
-  const preset = useParam('student', '');
-  const [records, setRecords] = useBehavior();
-  const [sick, setSick] = useSickBay();
+  const groupsQ = useGroups();
+  // A student can be in several of my groups (homeroom and subject); list once.
+  const all = useMemo(() => {
+    const seen = new Map<number, StudentDto>();
+    (groupsQ.data || []).flatMap(g => g.students).forEach(st => seen.set(st.id, st));
+    return [...seen.values()];
+  }, [groupsQ.data]);
+  const labelOf = (st: StudentDto) => `${st.name} · ${st.grNo}`;
+  const preset = Number(useParam('studentId', 0));
+  const [pickedName, setPickedName] = useState('');
+  const student = all.find(st => labelOf(st) === pickedName) || all.find(st => st.id === preset) || all[0];
+  const profile = useApi(student ? `teacher.student.${student.id}` : null, () => teacherApi.student(student!.id));
   const [tab, setTab] = useState('Discipline');
-  const [kind, setKind] = useState<'Positive' | 'Incident' | 'Warning'>(
-    'Incident',
+  const [kind, setKind] = useState('Positive');
+  const [points, setPoints] = useState('2');
+  const [note, setNote] = useState('');
+  const [tellParent, setTellParent] = useState(true);
+  const save = useMutation(teacherApi.health);
+  const records = (profile.data?.health || []).filter(r =>
+    tab === 'Sick bay' ? kindOf(r) === 'sickbay' : kindOf(r) !== 'sickbay',
   );
-  const [student, setStudent] = useState(preset);
-  const [points, setPoints] = useState('-1');
-  const [what, setWhat] = useState('');
-  const [tell, setTell] = useState(true);
 
-  const pickKind = (k: string) => {
-    const v = k as typeof kind;
-    setKind(v);
-    setPoints(v === 'Positive' ? '+2' : v === 'Incident' ? '-2' : '-1');
-  };
-
-  const save = () => {
-    const name = STUDENTS_5A.find(
-      s => s.name.toLowerCase() === student.trim().toLowerCase(),
-    )?.name;
-    if (!name) {
-      toast('Type a student name from Class 5-A');
+  const submit = async () => {
+    if (!student) {
+      toast('Choose a student');
       return;
     }
-    if (!what.trim()) {
+    if (note.trim().length < 3) {
       toast('Write what happened');
       return;
     }
-    if (tab === 'Sick bay') {
-      setSick(list => [
-        { id: newId('k'), name, when: 'Today, now', what: what.trim() },
-        ...list,
-      ]);
-    } else {
-      const n = parseInt(points.replace('+', ''), 10);
-      if (Number.isNaN(n)) {
-        toast('Points must be a number like +2 or -1');
-        return;
-      }
-      setRecords(list => [
-        {
-          id: newId('b'),
-          name,
-          date: '22 Oct',
-          what: what.trim(),
-          points: n,
-          kind,
-        },
-        ...list,
-      ]);
+    const sick = tab === 'Sick bay';
+    const p = Number(points);
+    const res = await save.run({
+      studentId: student.id,
+      kind: sick ? 'sickbay' : kind === 'Positive' ? 'behavior' : kind.toLowerCase(),
+      title: sick ? 'Sick bay' : kind,
+      note: note.trim(),
+      points: sick ? undefined : kind === 'Positive' ? Math.abs(p || 1) : -Math.abs(p || 1),
+    });
+    if (res) {
+      toast(tellParent ? 'Saved. The parent can see it in the app.' : 'Saved');
+      setNote('');
+      profile.refresh();
     }
-    setWhat('');
-    toast(tell ? 'Saved. Parent notified.' : 'Saved');
   };
 
   return (
-    <Screen
-      title="Behavior and health"
-      subtitle="Class 5-A"
-      footer={<Button label="Save record" onPress={save} />}
-    >
-      <Segmented options={['Discipline', 'Sick bay']} value={tab} onChange={setTab} />
-      <Card>
-        {tab === 'Discipline'
-          ? records.map((r, i) => (
-              <ListRow
-                key={r.id}
-                avatar={r.name}
-                title={r.name}
-                subtitle={`${r.date} · ${r.what} · ${fmtPoints(r.points)}`}
-                right={<Badge label={r.kind} tone={KIND_TONE[r.kind]} />}
-                last={i === records.length - 1}
-              />
-            ))
-          : sick.map((r, i) => (
-              <ListRow
-                key={r.id}
-                avatar={r.name}
-                title={`${r.name} · ${r.when}`}
-                subtitle={r.what}
-                last={i === sick.length - 1}
-              />
-            ))}
-      </Card>
-      <Card title={tab === 'Discipline' ? 'Add record' : 'Add sick-bay visit'}>
-        <View style={s.form}>
-          {tab === 'Discipline' ? (
-            <Segmented
-              options={['Positive', 'Incident', 'Warning']}
-              value={kind}
-              onChange={pickKind}
-            />
-          ) : null}
-          <HStack>
-            <View style={s.flex}>
-              <Field value={student} onChangeText={setStudent} placeholder={t('Student')} />
-            </View>
-            {tab === 'Discipline' ? (
-              <View style={s.points}>
-                <Field
-                  value={points}
-                  onChangeText={setPoints}
-                  keyboardType="numbers-and-punctuation"
-                />
+    <Screen title="Behavior and health" subtitle={student ? student.name : undefined} refreshing={profile.refreshing} onRefresh={profile.refresh}>
+      <QueryView q={groupsQ} isEmpty={() => all.length === 0} emptyText="No students in your classes.">
+        {() => (
+          <>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <Chips style={s.noWrap} options={all.map(labelOf)} value={student ? labelOf(student) : ''} onChange={setPickedName} />
+            </ScrollView>
+            <Segmented options={['Discipline', 'Sick bay']} value={tab} onChange={setTab} />
+            <Card>
+              {profile.loading ? (
+                <Text style={s.sub}>{t('Loading…')}</Text>
+              ) : records.length === 0 ? (
+                <Empty text="Nothing recorded yet." />
+              ) : (
+                records.map((r, i) => (
+                  <ListRow
+                    key={r.id}
+                    avatar={student?.name}
+                    title={String(r.note || r.title)}
+                    subtitle={`${dayLabel(r.recordDate)}${r.points ? ` · ${Number(r.points) > 0 ? '+' : ''}${r.points}` : ''}`}
+                    right={
+                      <Badge
+                        label={tab === 'Sick bay' ? 'Sick bay' : isPositive(r) ? 'Positive' : cap(kindOf(r))}
+                        tone={tab === 'Sick bay' ? 'info' : isPositive(r) ? 'success' : 'danger'}
+                      />
+                    }
+                    last={i === records.length - 1}
+                  />
+                ))
+              )}
+            </Card>
+            <Card title="Add record">
+              <View style={s.form}>
+                {tab === 'Discipline' ? (
+                  <>
+                    <Segmented options={KINDS} value={kind} onChange={setKind} />
+                    <Field label="Points" value={points} onChangeText={setPoints} keyboardType="number-pad" />
+                  </>
+                ) : null}
+                <Field label={tab === 'Sick bay' ? 'Complaint and action taken' : 'What happened'} value={note} onChangeText={setNote} multiline />
+                <View style={s.row}>
+                  <Text style={[s.sub, s.flex]}>{t('Tell the parent')}</Text>
+                  <Toggle value={tellParent} onChange={setTellParent} />
+                </View>
               </View>
-            ) : null}
-          </HStack>
-          <Field
-            value={what}
-            onChangeText={setWhat}
-            placeholder={tab === 'Discipline' ? 'What happened' : 'Complaint and care given'}
-            multiline
-          />
-          <View style={s.row}>
-            <Text style={s.label}>{t('Tell the parent')}</Text>
-            <Toggle value={tell} onChange={setTell} />
-          </View>
-        </View>
-      </Card>
+            </Card>
+            <Button label="Save record" onPress={submit} loading={save.busy} />
+          </>
+        )}
+      </QueryView>
     </Screen>
   );
 }
 
-// T18
+// T18: approve or reject leave of my classes.
 export function TeacherStudentLeaves() {
-  const [leaves, setLeaves] = useStudentLeaves();
-  const pending = leaves.filter(l => l.status === 'Pending');
-  const earlier = leaves.filter(l => l.status !== 'Pending');
-  const decide = (id: string, status: 'Approved' | 'Rejected') => {
-    setLeaves(list => list.map(l => (l.id === id ? { ...l, status } : l)));
-    toast(status === 'Approved' ? 'Leave approved. Parent notified.' : 'Leave rejected. Parent notified.');
+  const q = useApi('teacher.leaves', teacherApi.leaves);
+  const groups = useGroups();
+  const decide = useMutation(teacherApi.decideLeave);
+  const nameOf = (id?: number | null) =>
+    (groups.data || []).flatMap(g => g.students).find(st => st.id === id)?.name || `Student ${id ?? ''}`;
+  const list = q.data || [];
+  const pending = list.filter(l => l.status === 'pending');
+  const earlier = list.filter(l => l.status !== 'pending');
+  const act = async (id: number, status: 'approved' | 'rejected') => {
+    if (await decide.run(id, status)) {
+      toast(status === 'approved' ? 'Leave approved' : 'Leave rejected');
+      q.refresh();
+    }
   };
   return (
-    <Screen title="Student leaves" subtitle="Class 5-A">
-      {pending.length === 0 ? (
-        <Card>
-          <Muted>No pending leave requests.</Muted>
-        </Card>
-      ) : null}
-      {pending.map(l => (
-        <Card key={l.id}>
-          <View style={s.leaveHead}>
-            <Avatar name={l.name} />
-            <View style={s.flex}>
-              <Text style={s.name}>{l.name}</Text>
-              <Muted>{l.dates}</Muted>
-            </View>
-            <Badge label="Pending" tone="warn" />
-          </View>
-          <Body style={s.reason}>"{l.reason}"</Body>
-          {l.file ? (
-            <View style={s.file}>
-              <Paperclip size={16} color={colors.textMuted} />
-              <Text style={s.fileText}>{l.file}</Text>
-            </View>
-          ) : null}
-          <HStack>
-            <Button
-              label="Reject"
-              variant="danger"
-              onPress={() => decide(l.id, 'Rejected')}
-              style={s.flex}
-            />
-            <Button
-              label="Approve"
-              onPress={() => decide(l.id, 'Approved')}
-              style={s.flex}
-            />
-          </HStack>
-        </Card>
-      ))}
-      <Card title="Earlier">
-        {earlier.map((l, i) => (
-          <ListRow
-            key={l.id}
-            avatar={l.name}
-            title={l.name}
-            subtitle={`${l.dates} · ${l.reason}`}
-            right={
-              <Badge
-                label={l.status}
-                tone={l.status === 'Approved' ? 'success' : 'danger'}
-              />
-            }
-            last={i === earlier.length - 1}
-          />
-        ))}
-      </Card>
-      <InfoBanner
-        icon={Check}
-        text="Approved leave shows as Leave in attendance automatically."
-      />
+    <Screen title="Student leaves" refreshing={q.refreshing} onRefresh={q.refresh}>
+      <QueryView q={q} isEmpty={d => d.length === 0} emptyText="No leave requests from your classes.">
+        {() => (
+          <>
+            {pending.map(l => (
+              <Card key={l.id}>
+                <View style={s.head}>
+                  <Avatar name={nameOf(l.student_id)} />
+                  <View style={s.flex}>
+                    <Text style={s.name}>{nameOf(l.student_id)}</Text>
+                    <Text style={s.sub}>
+                      {dayLabel(l.from_date)} – {dayLabel(l.to_date)} · {Number(l.days)} day(s)
+                    </Text>
+                  </View>
+                  <Badge label="Pending" tone="warn" />
+                </View>
+                {l.reason ? <Text style={s.note}>“{l.reason}”</Text> : null}
+                <View style={s.actions}>
+                  <Button label="Reject" variant="danger" style={s.flex} onPress={() => act(l.id, 'rejected')} />
+                  <Button label="Approve" style={s.flex} onPress={() => act(l.id, 'approved')} loading={decide.busy} />
+                </View>
+              </Card>
+            ))}
+            <Card title="Earlier">
+              {earlier.length === 0 ? (
+                <Empty text="No earlier requests." />
+              ) : (
+                earlier.map((l, i) => (
+                  <ListRow
+                    key={l.id}
+                    avatar={nameOf(l.student_id)}
+                    title={nameOf(l.student_id)}
+                    subtitle={`${dayLabel(l.from_date)} – ${dayLabel(l.to_date)}${l.reason ? ` · ${l.reason}` : ''}`}
+                    right={<Badge label={cap(l.status)} tone={leaveTone(l.status)} />}
+                    last={i === earlier.length - 1}
+                  />
+                ))
+              )}
+            </Card>
+            <InfoBanner icon={Paperclip} text="Approved leave shows as Leave in attendance." />
+          </>
+        )}
+      </QueryView>
     </Screen>
   );
 }
 
 const s = StyleSheet.create({
   flex: { flex: 1 },
-  form: { gap: 10, marginTop: 6 },
-  points: { width: 80 },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  label: { fontSize: 13, fontWeight: '800', color: colors.text },
-  leaveHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  noWrap: { flexWrap: 'nowrap' },
+  sub: { fontSize: 12.5, color: colors.textMuted },
+  head: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   name: { fontSize: 15, fontWeight: '800', color: colors.text },
-  reason: { marginVertical: 10 },
-  file: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 10,
-  },
-  fileText: { fontSize: 14, color: colors.textMuted },
+  note: { fontSize: 13.5, color: colors.text, marginVertical: 8 },
+  actions: { flexDirection: 'row', gap: 10 },
+  form: { gap: 12 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
 });

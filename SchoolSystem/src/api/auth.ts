@@ -26,6 +26,8 @@ export async function completeSignIn(r: LoginResult, schoolCode: string): Promis
   await saveSession({
     token: r.accessToken,
     exp: tokenExpiry(r.accessToken),
+    refreshToken: r.refreshToken,
+    refreshExp: r.refreshToken ? tokenExpiry(r.refreshToken) : undefined,
     user: {
       id: r.user.id,
       name: r.user.name,
@@ -63,8 +65,9 @@ export async function completeSignIn(r: LoginResult, schoolCode: string): Promis
 
 // Signs out on the server (best effort) and wipes local state.
 export async function signOutEverywhere() {
-  if (getSession()) {
-    authApi.logout().catch(() => undefined);
+  const s = getSession();
+  if (s) {
+    authApi.logout(s.refreshToken).catch(() => undefined);
   }
   await saveSession(null);
   clearShared(['session.lang']);

@@ -1,4 +1,4 @@
-// S-02 Multi-campus management: campuses, settings, transfers, tenant.
+// S-02 Multi-campus management: campuses (live), settings, transfers, tenant.
 import React, { useState } from 'react';
 import { Text, View } from 'react-native';
 import { ArrowLeftRight, Building, ShieldCheck } from 'lucide-react-native';
@@ -22,123 +22,125 @@ import {
   PickerField,
 } from '../../../components/admin';
 import { ScreenProps, useNav, useParam } from '../../../navigation';
-import { useShared } from '../../../store';
-import {
-  ADMIN_STAFF,
-  ADMIN_STUDENTS,
-  Campus,
-  CAMPUSES,
-  logAudit,
-  useStaffRole,
-} from '../../../data/admin';
-import { Transfer, TRANSFERS } from '../../../data/admin-owner';
-import { localId, ReadOnlyBanner, useGuard } from './shared';
+import { logAudit, useStaffRole } from '../../../data/admin';
+import { invalidate, useApi, useMutation } from '../../../api/hooks';
+import { ContextDto, field, ModuleRow, webA } from '../../../api/webA';
+import { getSession } from '../../../api/session';
+import { Loading, NoApiBanner, QueryView } from '../../../components/states';
+import { ReadOnlyBanner, useGuard } from './shared';
 
-type CampusRow = Campus & { logoOnVoucher: boolean; feeStructure: string };
+export type CampusRow = ContextDto['campuses'][number];
 
-const SEED: CampusRow[] = CAMPUSES.map(c => ({
-  ...c,
-  logoOnVoucher: true,
-  feeStructure: `${c.name} fee structure 2026-27`,
-}));
-
-export function useCampuses() {
-  return useShared<CampusRow[]>('admin.campusList', SEED);
+// Campuses of the school from /api/web/context (only active ones are returned).
+export function useCampusList() {
+  return useApi('adm:context', webA.context);
 }
-
-const fmt = (n: number) => `Rs. ${(n / 1000000).toFixed(2)}M`;
 
 const blank = (): CampusRow => ({
   id: '',
   name: '',
-  city: 'Lahore',
+  code: '',
   address: '',
+  phone: '',
   timings: '7:45 AM – 1:40 PM',
-  bank: '',
-  strength: 0,
-  capacity: 500,
-  staff: 0,
-  collection: 0,
-  expected: 0,
-  expenses: 0,
-  attendance: 0,
-  active: true,
-  logoOnVoucher: true,
-  feeStructure: 'Copy from Main Campus',
+  bankName: '',
+  bankAccount: '',
 });
 
 function CampusForm({
   visible,
   onClose,
   initial,
+  onSaved,
 }: {
   visible: boolean;
   onClose: () => void;
   initial: CampusRow;
+  onSaved: () => void;
 }) {
-  const [, setList] = useCampuses();
   const [f, setF] = useState(initial);
+  const [logo, setLogo] = useState(true);
   const set = (k: keyof CampusRow) => (v: string) => setF(p => ({ ...p, [k]: v }));
-  const save = () => {
-    if (!f.name.trim() || !f.address.trim()) {
+  const { run, busy } = useMutation(
+    () =>
+      webA.saveCampus(
+        {
+          name: f.name.trim(),
+          code: (f.code || f.name.slice(0, 2)).toUpperCase(),
+          address: f.address,
+          phone: f.phone,
+          timings: f.timings,
+          bankName: f.bankName,
+          bankAccount: f.bankAccount,
+        },
+        f.id || undefined,
+      ),
+    'Campus saved',
+  );
+  const save = async () => {
+    if (!f.name.trim() || !String(f.address ?? '').trim()) {
       toast('Name and address are required');
       return;
     }
-    if (f.id) {
-      setList(l => l.map(c => (c.id === f.id ? f : c)));
-      logAudit('Campus', `Edited ${f.name}: address, timings, bank, voucher logo`);
-    } else {
-      const id = localId('cmp');
-      setList(l => [...l, { ...f, id }]);
-      logAudit('Campus', `Added campus ${f.name}`);
+    if (busy) {
+      return;
     }
-    toast('Campus saved');
-    onClose();
+    if ((await run()) !== undefined) {
+      logAudit('Campus', f.id ? `Edited ${f.name}` : `Added campus ${f.name}`);
+      onSaved();
+      onClose();
+    }
   };
   return (
-    <FormSheet visible={visible} onClose={onClose} title={f.id ? 'Edit campus' : 'Add campus'} onSubmit={save}>
+    <FormSheet visible={visible} onClose={onClose} title={f.id ? 'Edit campus' : 'Add campus'} onSubmit={save} submitLabel={busy ? 'Saving…' : 'Save'}>
       <Field label="Campus name" value={f.name} onChangeText={set('name')} placeholder="e.g. DHA Campus" />
-      <Field label="City" value={f.city} onChangeText={set('city')} />
-      <Field label="Address" value={f.address} onChangeText={set('address')} />
-      <Field label="Timings" value={f.timings} onChangeText={set('timings')} />
-      <Field label="Bank account (on vouchers)" value={f.bank} onChangeText={set('bank')} placeholder="Bank and account no." />
-      <PickerField
-        label="Fee structure"
-        value={f.feeStructure}
-        options={['Copy from Main Campus', 'Copy from Girls Campus', 'Separate structure', f.feeStructure].filter((x, i, arr) => arr.indexOf(x) === i)}
-        onChange={v => setF(p => ({ ...p, feeStructure: v }))}
-      />
+      <Field label="Code" value={f.code ?? ''} onChangeText={set('code')} placeholder="e.g. DHA" autoCapitalize="characters" />
+      <Field label="Address" value={f.address ?? ''} onChangeText={set('address')} />
+      <Field label="Phone" value={f.phone ?? ''} onChangeText={set('phone')} keyboardType="phone-pad" />
+      <Field label="Timings" value={f.timings ?? ''} onChangeText={set('timings')} />
+      <Field label="Bank (on vouchers)" value={f.bankName ?? ''} onChangeText={set('bankName')} placeholder="e.g. Meezan Bank" />
+      <Field label="Account no." value={f.bankAccount ?? ''} onChangeText={set('bankAccount')} />
       <View style={a.row}>
         <Text style={[a.bold, a.flex]}>Campus logo on vouchers</Text>
-        <Toggle value={f.logoOnVoucher} onChange={v => setF(p => ({ ...p, logoOnVoucher: v }))} />
+        <Toggle value={logo} onChange={setLogo} />
       </View>
+      <Text style={a.small}>The logo setting is kept on this phone; the server has no field for it yet.</Text>
     </FormSheet>
   );
 }
 
 export function AdminCampuses(_: ScreenProps) {
   const nav = useNav();
-  const [list] = useCampuses();
+  const q = useCampusList();
   const [role] = useStaffRole();
   const { guard } = useGuard();
   const [adding, setAdding] = useState(false);
+  const list = q.data?.campuses ?? [];
+  const school = getSession()?.schoolCode ?? '';
+  if (!q.data) {
+    return (
+      <Screen title="Campuses">
+        <QueryView q={q}>{() => null}</QueryView>
+      </Screen>
+    );
+  }
   return (
     <>
       <ListScreen
         title="Campuses"
-        subtitle={`${list.length} campuses · tenant BFS-001`}
+        subtitle={`${list.length} campuses · school ${school}`}
         items={list}
-        keyOf={c => c.id}
-        searchText={c => `${c.name} ${c.city} ${c.address}`}
-        filters={[{ label: 'Status', options: ['All', 'Active', 'Inactive'], get: c => (c.active ? 'Active' : 'Inactive') }]}
+        keyOf={c => String(c.id)}
+        searchText={c => `${c.name} ${c.code} ${c.address ?? ''}`}
         onAdd={role === 'owner' ? guard(() => setAdding(true)) : undefined}
         addLabel="Add campus"
         header={
           <>
             <ReadOnlyBanner />
+            {q.error ? <InfoBanner tone="danger" text={q.error} /> : null}
             <InfoBanner
               icon={ShieldCheck}
-              text="Each campus sees only its own data; the Owner sees combined figures. This school is tenant BFS-001 with fully isolated data."
+              text={`Each campus sees only its own data; the Owner sees combined figures. School ${school} is a separate tenant with fully isolated data.`}
             />
             <Button label="Transfers between campuses" variant="outline" icon={ArrowLeftRight} onPress={() => nav.push('AdminCampusTransfers')} />
           </>
@@ -147,145 +149,147 @@ export function AdminCampuses(_: ScreenProps) {
           <ListRow
             icon={Building}
             title={c.name}
-            subtitle={`${c.address}, ${c.city} · ${c.strength} students · ${c.staff} staff`}
-            right={<Badge label={c.active ? 'Active' : 'Inactive'} tone={c.active ? 'success' : 'neutral'} />}
-            onPress={() => nav.push('AdminCampusDetail', { id: c.id })}
+            subtitle={`${c.code}${c.address ? ` · ${c.address}` : ''}${c.timings ? ` · ${c.timings}` : ''}`}
+            right={<Badge label="Active" tone="success" />}
+            onPress={() => nav.push('AdminCampusDetail', { id: String(c.id) })}
             last={last}
           />
         )}
       />
-      {adding ? <CampusForm visible onClose={() => setAdding(false)} initial={blank()} /> : null}
+      {adding ? <CampusForm visible onClose={() => setAdding(false)} initial={blank()} onSaved={() => invalidate('adm:context')} /> : null}
     </>
   );
 }
 
 export function AdminCampusDetail(_: ScreenProps) {
   const nav = useNav();
-  const [list, setList] = useCampuses();
-  const id = useParam('id', list[0]?.id ?? 'main');
-  const c = list.find(x => x.id === id) ?? list[0];
+  const q = useCampusList();
+  const id = String(useParam('id', ''));
+  const c = q.data?.campuses.find(x => String(x.id) === id) ?? q.data?.campuses[0];
   const { guard } = useGuard();
   const [role] = useStaffRole();
   const [editing, setEditing] = useState(false);
   if (!c) {
-    return <Screen title="Campus" />;
+    return (
+      <Screen title="Campus">
+        {q.data ? <InfoBanner text="Campus not found." /> : <Loading />}
+      </Screen>
+    );
   }
-  const toggleActive = guard(() => {
-    if (role !== 'owner') {
-      toast('Only the Owner can activate or deactivate a campus');
-      return;
-    }
-    setList(l => l.map(x => (x.id === c.id ? { ...x, active: !x.active } : x)));
-    logAudit('Campus', `${c.name} ${c.active ? 'deactivated' : 'activated'}`);
-  });
   return (
     <Screen
       title={c.name}
-      subtitle={`${c.city} · ${c.active ? 'Active' : 'Inactive'}`}
-      footer={<Button label="Edit campus" onPress={guard(() => setEditing(true))} />}
+      subtitle={`${c.code} · Active`}
+      refreshing={q.refreshing}
+      onRefresh={q.refresh}
+      footer={role === 'owner' ? <Button label="Edit campus" onPress={guard(() => setEditing(true))} /> : undefined}
     >
       <ReadOnlyBanner />
       <Card title="Settings">
-        <KV k="Address" v={c.address} />
-        <KV k="Timings" v={c.timings} />
-        <KV k="Bank account" v={c.bank || '—'} />
-        <KV k="Logo on vouchers" v={c.logoOnVoucher ? 'Yes' : 'No'} />
-        <KV k="Fee structure" v={c.feeStructure} />
-        <KV k="Capacity" v={`${c.strength} / ${c.capacity}`} last />
+        <KV k="Address" v={c.address || '—'} />
+        <KV k="Phone" v={c.phone || '—'} />
+        <KV k="Timings" v={c.timings || '—'} />
+        <KV k="Bank" v={c.bankName || '—'} />
+        <KV k="Account no." v={c.bankAccount || '—'} last />
       </Card>
       <Card title="This month">
-        <KV k="Collection" v={fmt(c.collection)} />
-        <KV k="Expected" v={fmt(c.expected)} />
-        <KV k="Expenses" v={fmt(c.expenses)} />
-        <KV k="Attendance today" v={`${c.attendance}%`} last />
+        <NoApiBanner what="Per-campus collection, expenses and attendance" />
       </Card>
       <Card>
-        <View style={a.row}>
-          <Text style={[a.bold, a.flex]}>Campus active</Text>
-          <Toggle value={c.active} onChange={toggleActive} />
-        </View>
+        <Text style={a.bold}>Campus status</Text>
         <Text style={a.small}>
-          A campus with students, vouchers or staff can only be deactivated, never deleted.
+          A campus with students, vouchers or staff can only be deactivated, never deleted. The server has no
+          deactivate API yet — ask the platform administrator.
         </Text>
       </Card>
       <Button label="Transfer students or staff" variant="outline" icon={ArrowLeftRight} onPress={() => nav.push('AdminCampusTransfers')} />
-      {editing ? <CampusForm visible onClose={() => setEditing(false)} initial={c} /> : null}
+      {editing ? <CampusForm visible onClose={() => setEditing(false)} initial={c} onSaved={() => invalidate('adm:context')} /> : null}
     </Screen>
   );
 }
 
+// Transfers are kept as module records ("staff-transfers"); the server does not
+// move the student or staff record itself yet.
 export function AdminCampusTransfers(_: ScreenProps) {
-  const [list, setList] = useShared<Transfer[]>('admin.transfers', TRANSFERS);
-  const [campuses] = useCampuses();
+  const q = useApi('adm:mod:staff-transfers', () => webA.modules('staff-transfers'));
+  const ctx = useCampusList();
+  const students = useApi('adm:students:all', () => webA.students({ pageSize: 200 }));
+  const staff = useApi('adm:staff:all', webA.staff);
   const { guard } = useGuard();
   const [open, setOpen] = useState(false);
   const [kind, setKind] = useState<'Student' | 'Staff'>('Student');
   const [who, setWho] = useState('');
   const [to, setTo] = useState('');
+  const campuses = ctx.data?.campuses ?? [];
   const people =
     kind === 'Student'
-      ? ADMIN_STUDENTS.filter(s => s.status === 'Active').slice(0, 30).map(s => `${s.name} (${s.gr})`)
-      : ADMIN_STAFF.filter(s => s.status !== 'Left').map(s => `${s.name} (${s.id})`);
-  const findFrom = () => {
-    const camp =
-      kind === 'Student'
-        ? ADMIN_STUDENTS.find(s => who.includes(s.gr))?.campus
-        : ADMIN_STAFF.find(s => who.includes(s.id))?.campus;
-    return campuses.find(c => c.id === camp)?.name ?? 'Main Campus';
-  };
-  const save = () => {
+      ? (students.data?.items ?? []).map(s => `${s.name} (${s.grNo})`)
+      : (staff.data ?? []).map(s => `${s.name} (${s.empId})`);
+  const { run, busy } = useMutation(
+    (b: Record<string, unknown>) => webA.addModule('staff-transfers', b),
+    'Transfer saved with history',
+  );
+  const save = async () => {
     if (!who || !to) {
       toast('Choose the person and the new campus');
       return;
     }
-    const from = findFrom();
+    const from = campuses.find(c => String(c.id) === getSession()?.campusId)?.name ?? 'Current campus';
     if (from === to) {
       toast('Already in that campus');
       return;
     }
-    const t: Transfer = {
-      id: localId('tr'),
+    const res = await run({
+      title: who,
+      status: kind,
       who,
       kind,
       from,
       to,
-      when: 'Today',
       note: kind === 'Student' ? 'Fee adjusted to the new campus structure; history kept' : 'Payroll moved to the new campus; history kept',
-    };
-    setList(l => [t, ...l]);
-    logAudit('Transfer', `${kind} ${who}: ${from} → ${to}`);
-    toast('Transfer saved with history');
-    setOpen(false);
-    setWho('');
-    setTo('');
+    });
+    if (res !== undefined) {
+      logAudit('Transfer', `${kind} ${who}: ${from} → ${to}`);
+      q.refresh();
+      setOpen(false);
+      setWho('');
+      setTo('');
+    }
   };
+  const rows = (q.data ?? []) as ModuleRow[];
   return (
     <>
       <ListScreen
         title="Campus transfers"
         subtitle="Students and staff, with history"
-        items={list}
-        keyOf={t => t.id}
-        searchText={t => `${t.who} ${t.from} ${t.to}`}
-        filters={[{ label: 'Type', options: ['All', 'Student', 'Staff'], get: t => t.kind }]}
+        items={rows}
+        keyOf={t => String(t.id)}
+        searchText={t => `${field(t, 'who', 'title')} ${field(t, 'from')} ${field(t, 'to')}`}
+        filters={[{ label: 'Type', options: ['All', 'Student', 'Staff'], get: t => field(t, 'kind', 'status') }]}
         onAdd={guard(() => setOpen(true))}
         addLabel="New transfer"
-        header={<ReadOnlyBanner />}
+        empty={q.loading ? 'Loading…' : 'No transfers yet'}
+        header={
+          <>
+            <ReadOnlyBanner />
+            {q.error ? <InfoBanner tone="danger" text={q.error} /> : null}
+          </>
+        }
         renderItem={(t, last) => (
           <ListRow
             icon={ArrowLeftRight}
-            title={t.who}
-            subtitle={`${t.from} → ${t.to} · ${t.when}\n${t.note}`}
-            right={<Badge label={t.kind} tone="info" />}
+            title={field(t, 'who', 'title')}
+            subtitle={`${field(t, 'from')} → ${field(t, 'to')} · ${field(t, 'recordDate', 'record_date')}\n${field(t, 'note')}`}
+            right={<Badge label={field(t, 'kind', 'status') || 'Transfer'} tone="info" />}
             last={last}
           />
         )}
       />
-      <FormSheet visible={open} onClose={() => setOpen(false)} title="New transfer" onSubmit={save} submitLabel="Transfer">
+      <FormSheet visible={open} onClose={() => setOpen(false)} title="New transfer" onSubmit={save} submitLabel={busy ? 'Saving…' : 'Transfer'}>
         <Segmented options={['Student', 'Staff']} value={kind} onChange={v => { setKind(v as 'Student' | 'Staff'); setWho(''); }} />
         <PickerField label={kind === 'Student' ? 'Student' : 'Staff member'} value={who} options={people} onChange={setWho} />
-        <PickerField label="New campus" value={to} options={campuses.filter(c => c.active).map(c => c.name)} onChange={setTo} />
-        <Text style={a.small}>The fee is adjusted to the new campus structure and the full history is kept.</Text>
+        <PickerField label="New campus" value={to} options={campuses.map(c => c.name)} onChange={setTo} />
+        <Text style={a.small}>The transfer and its history are recorded. Moving the record itself needs a server API (not available yet).</Text>
       </FormSheet>
     </>
   );

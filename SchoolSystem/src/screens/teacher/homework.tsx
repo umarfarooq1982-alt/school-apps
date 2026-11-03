@@ -1,74 +1,82 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { CalendarDays, Layers, Paperclip, Plus } from 'lucide-react-native';
+import { CalendarDays, Check, FileText, Paperclip, Plus } from 'lucide-react-native';
 import {
   Avatar,
   Badge,
-  Body,
   Button,
   Card,
   Chips,
   Field,
-  HStack,
   IconButton,
-  Label,
+  InfoBanner,
   ListRow,
-  Muted,
-  Placeholder,
   Screen,
   Segmented,
   toast,
 } from '../../components/ui';
-import { colors } from '../../theme';
+import { Empty, QueryView } from '../../components/states';
+import { colors, radius } from '../../theme';
 import { useNav, useParam } from '../../navigation';
-import { MISSING_HOMEWORK } from '../../data/teacher';
-import { newId, useHomework, useSubmissions } from './state';
+import { useI18n } from '../../i18n';
+import { useApi, useMutation } from '../../api/hooks';
+import { RecordDto, StudentDto, teacherApi } from '../../api/mobile';
+import { addDays, ClassChips, classLabelFor, dayLabel, isoDate, useMyClasses } from './common';
 
-const CLASS_SUBJECTS = [
-  '5-A · Mathematics',
-  '5-A · English',
-  '6-A · English',
-  '3-B · English',
-];
-const DUE_DATES = ['Fri 23 Oct', 'Mon 26 Oct', 'Tue 27 Oct', 'Wed 28 Oct'];
+function useHomework() {
+  return useApi('teacher.homework', teacherApi.homework);
+}
 
-// T11
+function useStudents() {
+  return useApi('teacher.students', teacherApi.students);
+}
+
+function classStudents(groups: Array<{ classId: number; section: string; students: StudentDto[] }> | undefined, classId: number, section: string) {
+  return groups?.find(g => g.classId === classId && g.section === section)?.students || [];
+}
+
+const nextDays = () => Array.from({ length: 10 }, (_, i) => addDays(isoDate(), i + 1));
+
+// T11: assign homework to a class.
 export function TeacherAssignHomework() {
   const nav = useNav();
-  const [, setHomework] = useHomework();
-  const [cls, setCls] = useState(CLASS_SUBJECTS[0]);
+  const { classes, current, setPicked, today } = useMyClasses();
+  const students = useStudents();
+  const [subjectId, setSubjectId] = useState<number | null | undefined>(undefined);
+  const subject = current?.subjects.find(x => x.subjectId === subjectId) || current?.subjects[0];
   const [title, setTitle] = useState('');
-  const [instructions, setInstructions] = useState('');
-  const [dueIndex, setDueIndex] = useState(0);
+  const [body, setBody] = useState('');
+  const days = nextDays();
+  const [due, setDue] = useState(days[0]);
   const [max, setMax] = useState('10');
-  const [file, setFile] = useState<string | null>(null);
+  const assign = useMutation(teacherApi.assignHomework);
+  const size = current ? classStudents(students.data, current.classId, current.section).length : 0;
 
-  const assign = () => {
-    const m = Number(max);
-    if (!title.trim()) {
+  const submit = async () => {
+    if (!current) {
+      toast('No class is assigned to you yet');
+      return;
+    }
+    if (title.trim().length < 3) {
       toast('Enter a title');
-    } else if (!instructions.trim()) {
-      toast('Write the instructions');
-    } else if (!Number.isInteger(m) || m < 1 || m > 100) {
-      toast('Max marks must be 1 to 100');
-    } else {
-      const [c, subj] = cls.split(' · ');
-      setHomework(h => [
-        {
-          id: newId('th'),
-          title: title.trim(),
-          classKey: `${c} ${subj}`,
-          due: DUE_DATES[dueIndex].replace(/^\w+ /, ''),
-          submitted: 0,
-          total: 30,
-          toCheck: 0,
-          status: 'Open',
-          maxMarks: m,
-          instructions,
-        },
-        ...h,
-      ]);
-      toast('Homework assigned to 30 students');
+      return;
+    }
+    const m = Number(max);
+    if (!Number.isFinite(m) || m <= 0 || m > 100) {
+      toast('Max marks must be 1–100');
+      return;
+    }
+    // The server has no max-marks field; it is kept in the instructions.
+    const res = await assign.run({
+      classId: current.classId,
+      section: current.section,
+      subjectId: subject?.subjectId ?? null,
+      title: title.trim(),
+      body: `${body.trim()}${body.trim() ? '\n' : ''}Max marks: ${m}`,
+      dueDate: due,
+    });
+    if (res) {
+      toast(`Homework assigned to ${current.label}`);
       nav.pop();
     }
   };
@@ -76,284 +84,304 @@ export function TeacherAssignHomework() {
   return (
     <Screen
       title="Assign homework"
-      footer={<Button label="Assign to 30 students" onPress={assign} />}
+      footer={<Button label={`Assign to ${size || 'the'} students`} onPress={submit} loading={assign.busy} />}
     >
-      <View style={s.labelRow}>
-        <Layers size={16} color={colors.text} />
-        <Label>Class and subject</Label>
-      </View>
-      <Chips options={CLASS_SUBJECTS} value={cls} onChange={setCls} />
-      <Field label="Title" value={title} onChangeText={setTitle} placeholder="Fractions worksheet" />
-      <Field
-        label="Instructions"
-        value={instructions}
-        onChangeText={setInstructions}
-        multiline
-        placeholder="Solve Q1–10. Show working. Upload a clear photo of each page."
-      />
-      <HStack>
-        <View style={s.flex2}>
-          <Field
-            label="Due date"
-            icon={CalendarDays}
-            value={DUE_DATES[dueIndex]}
-            onPress={() => setDueIndex(i => (i + 1) % DUE_DATES.length)}
-          />
-        </View>
-        <View style={s.flex1}>
-          <Field label="Max marks" value={max} onChangeText={setMax} keyboardType="number-pad" />
-        </View>
-      </HStack>
-      <Field
-        icon={Paperclip}
-        value={file ?? 'Attach worksheet (optional)'}
-        onPress={() =>
-          setFile(f => (f ? null : 'worksheet-fractions.pdf'))
-        }
-      />
-      <Muted>Tap the due date to change it. Tap the attachment to add or remove it.</Muted>
+      <QueryView q={today} isEmpty={() => classes.length === 0} emptyText="No class is assigned to you yet.">
+        {() => (
+          <>
+            <ClassChips classes={classes} value={current?.key} onChange={setPicked} />
+            {current && current.subjects.length > 1 ? (
+              <Chips
+                options={current.subjects.map(x => x.subject)}
+                value={subject?.subject || ''}
+                onChange={n => setSubjectId(current.subjects.find(x => x.subject === n)?.subjectId ?? null)}
+              />
+            ) : null}
+            <Text style={s.sub}>
+              {current?.label} · {subject?.subject}
+            </Text>
+            <Field label="Title" value={title} onChangeText={setTitle} placeholder="Fractions worksheet" />
+            <Field
+              label="Instructions"
+              value={body}
+              onChangeText={setBody}
+              multiline
+              placeholder="What the students should do"
+            />
+            <Text style={s.label}>Due date</Text>
+            <Chips options={days.map(dayLabel)} value={dayLabel(due)} onChange={l => setDue(days.find(d => dayLabel(d) === l) || days[0])} />
+            <Field label="Max marks" value={max} onChangeText={setMax} keyboardType="number-pad" />
+            <Button
+              label="Attach worksheet"
+              variant="outline"
+              icon={Paperclip}
+              onPress={() => toast('Attaching files needs the file picker, which is not in the app yet.')}
+            />
+          </>
+        )}
+      </QueryView>
     </Screen>
   );
 }
 
-// T12
+// T12: all homework with submitted counts and a missing report.
 export function TeacherHomeworkList() {
   const nav = useNav();
-  const [homework] = useHomework();
+  const { t } = useI18n();
+  const q = useHomework();
+  const students = useStudents();
+  const { classes } = useMyClasses();
   const [tab, setTab] = useState('Assigned');
-  const missingLabel = `Missing ${MISSING_HOMEWORK.length}`;
+  const today = isoDate();
+  const list = q.data || [];
+  const missing = list
+    .filter(h => h.dueDate && h.dueDate < today)
+    .flatMap(h => {
+      const done = new Set(h.submissions.map(x => Number(x.studentId)));
+      return classStudents(students.data, h.classId, h.section)
+        .filter(st => !done.has(st.id))
+        .map(st => ({ hw: h, st }));
+    });
+  const missingLabel = `${t('Missing')} ${missing.length}`;
   return (
     <Screen
       title="Homework"
-      right={
-        <IconButton icon={Plus} onPress={() => nav.push('TeacherAssignHomework')} />
-      }
+      right={<IconButton icon={Plus} onPress={() => nav.push('TeacherAssignHomework')} />}
+      refreshing={q.refreshing}
+      onRefresh={() => {
+        q.refresh();
+        students.refresh();
+      }}
     >
-      <Segmented options={['Assigned', missingLabel]} value={tab} onChange={setTab} />
-      {tab === 'Assigned' ? (
-        <Card>
-          {homework.map((h, i) => (
-            <ListRow
-              key={h.id}
-              icon={Paperclip}
-              title={h.title}
-              subtitle={`${h.classKey} · due ${h.due}`}
-              right={
-                <View style={s.right}>
-                  <Text style={s.count}>
-                    {h.submitted} / {h.total}
-                  </Text>
-                  <Badge
-                    label={
-                      h.toCheck ? `${h.toCheck} to check` : h.status
+      <Segmented options={['Assigned', missingLabel]} value={tab === 'Assigned' ? 'Assigned' : missingLabel} onChange={v => setTab(v === 'Assigned' ? 'Assigned' : 'Missing')} />
+      <QueryView q={q} isEmpty={d => d.length === 0} emptyText="No homework assigned yet.">
+        {() =>
+          tab === 'Assigned' ? (
+            <Card>
+              {list.map((h, i) => {
+                const size = classStudents(students.data, h.classId, h.section).length;
+                const toCheck = h.submissions.filter(x => x.status !== 'graded').length;
+                return (
+                  <ListRow
+                    key={h.id}
+                    icon={Paperclip}
+                    title={h.title}
+                    subtitle={`${classLabelFor(classes, h.classId, h.section)} · ${t('due')} ${dayLabel(h.dueDate)}`}
+                    right={
+                      <View style={s.right}>
+                        <Text style={s.count}>
+                          {h.submitted} / {size || '—'}
+                        </Text>
+                        <Badge
+                          label={toCheck ? `${toCheck} to check` : h.submitted ? 'Checked' : 'Open'}
+                          tone={toCheck ? 'warn' : h.submitted ? 'success' : 'neutral'}
+                        />
+                      </View>
                     }
-                    tone={
-                      h.toCheck ? 'warn' : h.status === 'Checked' ? 'success' : 'neutral'
-                    }
+                    onPress={() => nav.push('TeacherCheckHomework', { id: h.id })}
+                    last={i === list.length - 1}
                   />
-                </View>
-              }
-              onPress={() => nav.push('TeacherCheckHomework', { id: h.id })}
-              last={i === homework.length - 1}
-            />
-          ))}
-        </Card>
-      ) : null}
-      <Card title="Missing after due date">
-        {(tab === 'Assigned' ? MISSING_HOMEWORK.slice(0, 2) : MISSING_HOMEWORK).map(
-          (m, i, arr) => (
-            <ListRow
-              key={m.id}
-              avatar={m.name}
-              title={m.name}
-              subtitle={m.what}
-              right={<Badge label="Missing" tone="danger" />}
-              last={i === arr.length - 1}
-            />
-          ),
-        )}
-      </Card>
+                );
+              })}
+            </Card>
+          ) : (
+            <Card title="Missing after due date">
+              {missing.length === 0 ? (
+                <Empty text="Nobody is missing homework." />
+              ) : (
+                missing.map(({ hw, st }, i) => (
+                  <ListRow
+                    key={`${hw.id}-${st.id}`}
+                    avatar={st.name}
+                    title={st.name}
+                    subtitle={`${hw.title} · not submitted`}
+                    right={<Badge label="Missing" tone="danger" />}
+                    last={i === missing.length - 1}
+                  />
+                ))
+              )}
+            </Card>
+          )
+        }
+      </QueryView>
     </Screen>
   );
 }
 
-// T13
+// T13: see submissions, grade and comment.
 export function TeacherCheckHomework() {
-  const id = useParam('id', 'th1');
-  const [homework, setHomework] = useHomework();
-  const hw = homework.find(h => h.id === id) ?? homework[0];
-  const [subs, setSubs] = useSubmissions();
+  const id = useParam<number>('id', 0);
+  const q = useHomework();
+  const students = useStudents();
+  const hw = (q.data || []).find(h => h.id === Number(id)) || (q.data || [])[0];
   const [tab, setTab] = useState('To check');
-  const toCheck = subs.filter(x => !x.marks);
-  const checked = subs.filter(x => x.marks);
-  const [current, setCurrent] = useState(toCheck[0]?.id ?? '');
-  const cur = toCheck.find(x => x.id === current) ?? toCheck[0];
-  const [marks, setMarks] = useState('9');
+  const [marks, setMarks] = useState('');
   const [comment, setComment] = useState('');
+  const grade = useMutation(teacherApi.grade);
+  const subs = hw?.submissions || [];
+  const pending = subs.filter(x => x.status !== 'graded');
+  const checked = subs.filter(x => x.status === 'graded');
+  const roster = hw ? classStudents(students.data, hw.classId, hw.section) : [];
+  const done = new Set(subs.map(x => Number(x.studentId)));
+  const missing = roster.filter(st => !done.has(st.id));
+  const nameOf = (r: RecordDto) => roster.find(st => st.id === Number(r.studentId))?.name || `Student ${r.studentId ?? ''}`;
+  // /teacher/homework does not return the instructions or max marks.
+  const maxMarks = 10;
+  const currentSub = pending[0];
+  const late = (r: RecordDto) => !!hw?.dueDate && r.recordDate > hw.dueDate;
 
-  const saveNext = () => {
-    if (!cur) {
-      toast('All submissions are checked');
+  const saveNext = async () => {
+    if (!currentSub) {
+      toast('Nothing left to check');
       return;
     }
     const m = Number(marks);
-    if (marks.trim() === '' || Number.isNaN(m) || m < 0 || m > hw.maxMarks) {
-      toast(`Marks must be 0 to ${hw.maxMarks}`);
+    if (marks === '' || !Number.isFinite(m) || m < 0 || m > maxMarks) {
+      toast(`Marks must be 0–${maxMarks}`);
       return;
     }
-    setSubs(list =>
-      list.map(x =>
-        x.id === cur.id ? { ...x, marks: `${m}/${hw.maxMarks}`, comment } : x,
-      ),
-    );
-    setHomework(list =>
-      list.map(h =>
-        h.id === hw.id
-          ? {
-              ...h,
-              toCheck: Math.max(0, h.toCheck - 1),
-              status: h.toCheck - 1 <= 0 ? 'Checked' : h.status,
-            }
-          : h,
-      ),
-    );
-    const next = toCheck.find(x => x.id !== cur.id);
-    setCurrent(next?.id ?? '');
-    setMarks('');
-    setComment('');
-    toast(next ? `Saved. Next: ${next.name}` : 'All submissions checked');
+    const res = await grade.run(currentSub.id, m, comment.trim());
+    if (res) {
+      setMarks('');
+      setComment('');
+      toast('Saved');
+      q.refresh();
+    }
   };
 
   return (
     <Screen
-      title={hw.title}
-      subtitle={`${hw.classKey.split(' ')[0]} · ${hw.submitted} of ${hw.total} submitted`}
-      footer={
-        tab === 'To check' && cur ? (
-          <Button label="Save and next" onPress={saveNext} />
-        ) : undefined
-      }
+      title={hw?.title || 'Check homework'}
+      subtitle={hw ? `${subs.length} of ${roster.length || '—'} submitted` : undefined}
+      refreshing={q.refreshing}
+      onRefresh={q.refresh}
     >
-      <Segmented
-        options={[
-          'To check',
-          'Checked',
-          `Missing ${MISSING_HOMEWORK.length}`,
-        ]}
-        value={tab}
-        onChange={setTab}
-      />
-      {tab === 'To check' ? (
-        cur ? (
+      <QueryView q={q} isEmpty={() => !hw} emptyText="This homework was not found.">
+        {() => (
           <>
-            <Card>
-              <View style={s.subHead}>
-                <Avatar name={cur.name} />
-                <View style={s.flex1}>
-                  <Text style={s.name}>{cur.name}</Text>
-                  <Muted>{cur.when}</Muted>
-                </View>
-                <Badge
-                  label={cur.badge}
-                  tone={cur.badge === 'Late' ? 'warn' : cur.badge === 'New' ? 'info' : 'success'}
-                />
-              </View>
-              <HStack style={s.pages}>
-                {Array.from({ length: cur.pages }).map((_, i) => (
-                  <Placeholder key={i} label={`page ${i + 1}`} height={110} style={s.flex1} />
-                ))}
-              </HStack>
-              <Body>"{cur.answer}"</Body>
-              <HStack style={s.markRow}>
-                <View style={s.markBox}>
-                  <View style={s.flex1}>
-                    <Field
-                      value={marks}
-                      onChangeText={setMarks}
-                      keyboardType="number-pad"
-                      style={s.markInput}
-                    />
-                  </View>
-                  <Text style={s.outOf}>/ {hw.maxMarks}</Text>
-                </View>
-                <View style={s.flex1}>
-                  <Field value={comment} onChangeText={setComment} placeholder="Good effort, check Q7 again" />
-                </View>
-              </HStack>
-            </Card>
-            <Card>
-              {toCheck
-                .filter(x => x.id !== cur.id)
-                .map((x, i, arr) => (
-                  <ListRow
-                    key={x.id}
-                    avatar={x.name}
-                    title={x.name}
-                    subtitle={x.when}
-                    right={
-                      <Badge
-                        label={x.badge}
-                        tone={x.badge === 'Late' ? 'warn' : x.badge === 'New' ? 'info' : 'success'}
-                      />
-                    }
-                    onPress={() => setCurrent(x.id)}
-                    last={i === arr.length - 1}
-                  />
-                ))}
-              {toCheck.length === 1 ? <Muted>This is the last one.</Muted> : null}
-            </Card>
-          </>
-        ) : (
-          <Card>
-            <Muted>Everything is checked. Well done!</Muted>
-          </Card>
-        )
-      ) : tab === 'Checked' ? (
-        <Card>
-          {checked.length ? (
-            checked.map((x, i) => (
-              <ListRow
-                key={x.id}
-                avatar={x.name}
-                title={x.name}
-                subtitle={x.comment ? `"${x.comment}"` : x.when}
-                right={<Badge label={x.marks ?? ''} tone="success" />}
-                last={i === checked.length - 1}
-              />
-            ))
-          ) : (
-            <Muted>Nothing checked yet.</Muted>
-          )}
-        </Card>
-      ) : (
-        <Card>
-          {MISSING_HOMEWORK.map((m, i) => (
-            <ListRow
-              key={m.id}
-              avatar={m.name}
-              title={m.name}
-              subtitle={m.what}
-              right={<Badge label="Missing" tone="danger" />}
-              last={i === MISSING_HOMEWORK.length - 1}
+            <Segmented
+              options={[`To check ${pending.length}`, `Checked ${checked.length}`, `Missing ${missing.length}`]}
+              value={`${tab} ${tab === 'To check' ? pending.length : tab === 'Checked' ? checked.length : missing.length}`}
+              onChange={v => setTab(v.replace(/ \d+$/, ''))}
             />
-          ))}
-        </Card>
-      )}
+            {tab === 'To check' ? (
+              currentSub ? (
+                <>
+                  <Card>
+                    <View style={s.head}>
+                      <Avatar name={nameOf(currentSub)} />
+                      <View style={s.flex}>
+                        <Text style={s.name}>{nameOf(currentSub)}</Text>
+                        <Text style={s.sub}>Submitted {dayLabel(currentSub.recordDate)}</Text>
+                      </View>
+                      <Badge label={late(currentSub) ? 'Late' : 'On time'} tone={late(currentSub) ? 'warn' : 'success'} />
+                    </View>
+                    {currentSub.note ? <Text style={s.note}>“{String(currentSub.note)}”</Text> : null}
+                    {currentSub.fileUrl ? (
+                      <View style={s.file}>
+                        <FileText size={16} color={colors.textMuted} />
+                        <Text style={s.fileText} numberOfLines={1}>
+                          {String(currentSub.fileUrl).split('/').pop()}
+                        </Text>
+                      </View>
+                    ) : null}
+                    <View style={s.gradeRow}>
+                      <View style={s.marksBox}>
+                        <Field value={marks} onChangeText={setMarks} keyboardType="number-pad" placeholder="0" style={s.center} />
+                      </View>
+                      <Text style={s.outOf}>/ {maxMarks}</Text>
+                      <View style={s.flex}>
+                        <Field value={comment} onChangeText={setComment} placeholder="Comment" />
+                      </View>
+                    </View>
+                  </Card>
+                  <Card>
+                    {pending.slice(1).map((r, i, arr) => (
+                      <ListRow
+                        key={r.id}
+                        avatar={nameOf(r)}
+                        title={nameOf(r)}
+                        subtitle={`Submitted ${dayLabel(r.recordDate)}`}
+                        right={<Badge label={late(r) ? 'Late' : 'New'} tone={late(r) ? 'warn' : 'info'} />}
+                        last={i === arr.length - 1}
+                      />
+                    ))}
+                    {pending.length < 2 ? <Text style={s.sub}>No more submissions waiting.</Text> : null}
+                  </Card>
+                  <Button label="Save and next" onPress={saveNext} loading={grade.busy} />
+                </>
+              ) : (
+                <InfoBanner tone="success" icon={Check} text="All submissions are checked." />
+              )
+            ) : tab === 'Checked' ? (
+              <Card>
+                {checked.length === 0 ? (
+                  <Empty text="Nothing checked yet." />
+                ) : (
+                  checked.map((r, i) => (
+                    <ListRow
+                      key={r.id}
+                      avatar={nameOf(r)}
+                      title={nameOf(r)}
+                      subtitle={r.comment ? String(r.comment) : 'No comment'}
+                      right={<Badge label={`${r.marks ?? '—'} / ${maxMarks}`} tone="success" />}
+                      last={i === checked.length - 1}
+                    />
+                  ))
+                )}
+              </Card>
+            ) : (
+              <Card>
+                {missing.length === 0 ? (
+                  <Empty text="Everyone has submitted." />
+                ) : (
+                  missing.map((st, i) => (
+                    <ListRow
+                      key={st.id}
+                      avatar={st.name}
+                      title={st.name}
+                      subtitle={hw?.dueDate ? `Due ${dayLabel(hw.dueDate)}` : 'Not submitted'}
+                      right={<Badge label="Missing" tone="danger" />}
+                      last={i === missing.length - 1}
+                    />
+                  ))
+                )}
+              </Card>
+            )}
+            <View style={s.dueRow}>
+              <CalendarDays size={14} color={colors.textMuted} />
+              <Text style={s.sub}>Due {dayLabel(hw?.dueDate)}</Text>
+            </View>
+          </>
+        )}
+      </QueryView>
     </Screen>
   );
 }
 
 const s = StyleSheet.create({
-  flex1: { flex: 1 },
-  flex2: { flex: 1.6 },
+  flex: { flex: 1 },
+  sub: { fontSize: 12.5, color: colors.textMuted },
+  label: { fontSize: 12.5, fontWeight: '800', color: colors.text },
   right: { alignItems: 'flex-end', gap: 4 },
-  count: { fontSize: 14, fontWeight: '800', color: colors.text },
-  subHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  count: { fontSize: 13.5, fontWeight: '800', color: colors.text },
+  head: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
   name: { fontSize: 15, fontWeight: '800', color: colors.text },
-  pages: { marginVertical: 10 },
-  markRow: { marginTop: 10, alignItems: 'center' },
-  labelRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  markBox: { width: 104, flexDirection: 'row', alignItems: 'center', gap: 4 },
-  markInput: { textAlign: 'center', fontWeight: '800', minWidth: 30 },
-  outOf: { fontSize: 14, fontWeight: '700', color: colors.text },
+  note: { fontSize: 13.5, color: colors.text, marginVertical: 6 },
+  file: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    padding: 10,
+    marginBottom: 8,
+  },
+  fileText: { flex: 1, fontSize: 13, color: colors.textMuted },
+  gradeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  marksBox: { width: 64 },
+  outOf: { fontSize: 14, fontWeight: '800', color: colors.text },
+  center: { textAlign: 'center', fontWeight: '800' },
+  dueRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
 });

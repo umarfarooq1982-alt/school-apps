@@ -1,4 +1,6 @@
 // M-01 Academic session: sessions, classes, sections, subjects, mapping, terms.
+// Live from /api/web/academic (+ sessions, copy-forward, classes, subjects,
+// class-subjects). Terms have no server API and stay on the phone.
 import React, { useState } from 'react';
 import { Text, View } from 'react-native';
 import { BookOpen, CalendarDays, Copy, Layers, Link, School } from 'lucide-react-native';
@@ -13,50 +15,60 @@ import {
   toast,
   Toggle,
 } from '../../../components/ui';
-import { adminStyles as a, FormSheet, ListScreen, PickerField, useReasonPrompt } from '../../../components/admin';
+import { adminStyles as a, FormSheet, ListScreen, PickerField } from '../../../components/admin';
 import { ScreenProps, useNav } from '../../../navigation';
 import { useShared } from '../../../store';
-import { CAMPUSES, CLASSES, logAudit, Session, SESSIONS, useStaffRole } from '../../../data/admin';
-import {
-  CLASS_SECTIONS,
-  CLASS_SUBJECTS,
-  ClassSection,
-  SUBJECT_ROWS,
-  SubjectRow,
-  TEACHER_NAMES,
-  Term,
-  TERMS,
-} from '../../../data/admin-principal';
+import { logAudit, useStaffRole } from '../../../data/admin';
+import { Term, TERMS } from '../../../data/admin-principal';
+import { invalidate, useApi, useMutation } from '../../../api/hooks';
+import { AcademicDto, webA } from '../../../api/webA';
+import { getSession } from '../../../api/session';
+import { Loading, NoApiBanner, QueryView } from '../../../components/states';
 import { localId, ReadOnlyBanner, useGuard } from '../owner/shared';
 
-type SessionRow = Session & { campus: string };
-
-const SESSION_SEED: SessionRow[] = CAMPUSES.flatMap(c => SESSIONS.map(s => ({ ...s, campus: c.name })));
-
-export const useSessions = () => useShared<SessionRow[]>('admin.sessionList', SESSION_SEED);
-export const useClassSections = () => useShared<ClassSection[]>('admin.classSections', CLASS_SECTIONS);
-export const useSubjects = () => useShared<SubjectRow[]>('admin.subjects', SUBJECT_ROWS);
-export const useMapping = () => useShared<Record<string, string[]>>('admin.classSubjects', CLASS_SUBJECTS);
 export const useTerms = () => useShared<Term[]>('admin.terms', TERMS);
+
+export function useAcademic() {
+  return useApi('adm:academic', webA.academic);
+}
+
+// Students per class-section, from the strength report (grNo, classId, section).
+function useEnrolled() {
+  const q = useApi('adm:report:strength', () => webA.report('strength'));
+  const map: Record<string, number> = {};
+  (q.data?.rows ?? []).forEach(r => {
+    if (String(r.status ?? 'active') === 'active') {
+      const k = `${r.classId}-${r.section}`;
+      map[k] = (map[k] ?? 0) + 1;
+    }
+  });
+  return map;
+}
+
+const refreshAcademic = () => {
+  invalidate('adm:academic');
+  invalidate('adm:context');
+};
 
 export function AdminAcademicSetup(_: ScreenProps) {
   const nav = useNav();
-  const [sessions] = useSessions();
-  const [cs] = useClassSections();
-  const [subjects] = useSubjects();
+  const q = useAcademic();
   const [terms] = useTerms();
-  const active = sessions.filter(s => s.status === 'Active');
+  const d = q.data;
+  const sections = d?.classes.reduce((n, c) => n + c.sections.length, 0) ?? 0;
+  const current = d?.sessions.find(s => s.isCurrent);
   const items = [
-    { route: 'AdminAcadSessions', icon: CalendarDays, title: 'Sessions', sub: `${active.length} active (one per campus) · ${sessions.length} in total` },
+    { route: 'AdminAcadSessions', icon: CalendarDays, title: 'Sessions', sub: d ? `${d.sessions.filter(s => s.isCurrent).length} active · ${d.sessions.length} in total` : '…' },
     { route: 'AdminAcadCopy', icon: Copy, title: 'Copy forward', sub: 'Classes, sections, subjects and fee structure into a new session' },
-    { route: 'AdminAcadClasses', icon: School, title: 'Classes and sections', sub: `${CLASSES.length} classes · ${cs.length} sections with capacity, class teacher and room` },
-    { route: 'AdminAcadSubjects', icon: BookOpen, title: 'Subjects', sub: `${subjects.length} subjects · core, elective, optional` },
+    { route: 'AdminAcadClasses', icon: School, title: 'Classes and sections', sub: d ? `${d.classes.length} classes · ${sections} sections with capacity, class teacher and room` : '…' },
+    { route: 'AdminAcadSubjects', icon: BookOpen, title: 'Subjects', sub: d ? `${d.subjects.length} subjects · core, elective, optional` : '…' },
     { route: 'AdminAcadMapping', icon: Link, title: 'Class-subject mapping', sub: 'Which subjects each class studies' },
     { route: 'AdminAcadTerms', icon: Layers, title: 'Terms', sub: `${terms.length} terms used by Exams and Curriculum` },
   ];
   return (
-    <Screen title="Academic setup" subtitle="Session 2026-27">
+    <Screen title="Academic setup" subtitle={current ? `Session ${current.name}` : ''} refreshing={q.refreshing} onRefresh={q.refresh}>
       <ReadOnlyBanner />
+      {q.error ? <InfoBanner tone="danger" text={q.error} /> : null}
       <Card>
         {items.map((it, i) => (
           <ListRow key={it.route} icon={it.icon} title={it.title} subtitle={it.sub} onPress={() => nav.push(it.route)} chevron last={i === items.length - 1} />
@@ -69,137 +81,176 @@ export function AdminAcademicSetup(_: ScreenProps) {
 
 // ---------- Sessions ----------
 
+type SessionRow = AcademicDto['sessions'][number];
+
 export function AdminAcadSessions(_: ScreenProps) {
-  const [list, setList] = useSessions();
+  const q = useAcademic();
   const [role] = useStaffRole();
   const { guard } = useGuard();
-  const [prompt, ask] = useReasonPrompt();
   const [open, setOpen] = useState(false);
-  const [f, setF] = useState({ name: '2027-28', start: '1 Apr 2027', end: '31 Mar 2028', campus: CAMPUSES[0].name });
-  const create = () => {
+  const y = new Date().getFullYear() + 1;
+  const [f, setF] = useState({ name: `${y}-${String(y + 1).slice(2)}`, start: `${y}-04-01`, end: `${y + 1}-03-31`, makeCurrent: false });
+  const add = useMutation(webA.addSession, 'Session created');
+  const list = q.data?.sessions ?? [];
+  const create = async () => {
     if (!/^\d{4}-\d{2}$/.test(f.name)) {
       toast('Session name must look like 2027-28');
       return;
     }
-    if (list.some(s => s.name === f.name && s.campus === f.campus)) {
-      toast('This session already exists for the campus');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(f.start) || !/^\d{4}-\d{2}-\d{2}$/.test(f.end) || f.end <= f.start) {
+      toast('Enter start and end dates as YYYY-MM-DD');
       return;
     }
-    setList(l => [{ id: f.name, name: f.name, start: f.start, end: f.end, status: 'Planned', campus: f.campus }, ...l]);
-    logAudit('Session', `Created ${f.name} for ${f.campus}`);
-    toast('Session created as Planned');
-    setOpen(false);
+    if (list.some(s => s.name === f.name)) {
+      toast('This session already exists');
+      return;
+    }
+    if (f.makeCurrent && role !== 'owner') {
+      toast('Only the Owner can make a new session the active one');
+      return;
+    }
+    if ((await add.run({ name: f.name, startDate: f.start, endDate: f.end, makeCurrent: f.makeCurrent })) !== undefined) {
+      logAudit('Session', `Created ${f.name}${f.makeCurrent ? ' (made current)' : ''}`);
+      refreshAcademic();
+      setOpen(false);
+    }
   };
-  const activate = (s: SessionRow) =>
-    guard(() => {
-      const current = list.find(x => x.campus === s.campus && x.status === 'Active');
-      if (current && current !== s) {
-        toast(`Close ${current.name} first. Only one session can be active per campus.`);
-        return;
-      }
-      if (s.status === 'Closed' && role !== 'owner') {
-        toast('A closed session can only be reopened by the Owner');
-        return;
-      }
-      setList(l => l.map(x => (x === s ? { ...x, status: 'Active' } : x)));
-      logAudit('Session', `${s.name} (${s.campus}) marked active`);
-    })();
-  const close = (s: SessionRow) =>
-    guard(() =>
-      ask(`Close session ${s.name} for ${s.campus}?`, reason => {
-        setList(l => l.map(x => (x === s ? { ...x, status: 'Closed' } : x)));
-        logAudit('Session', `${s.name} (${s.campus}) closed. Reason: ${reason}`);
-        toast('Session closed. It is now read-only except for the Owner.');
-      }),
-    )();
+  const status = (s: SessionRow) => (s.isClosed ? 'Closed' : s.isCurrent ? 'Active' : 'Planned');
   return (
     <>
       <ListScreen
         title="Sessions"
-        subtitle="One active session per campus"
+        subtitle="One active session at a time"
         items={list}
-        keyOf={s => `${s.campus}-${s.id}`}
-        searchText={s => `${s.name} ${s.campus}`}
-        filters={[
-          { label: 'Campus', options: ['All', ...CAMPUSES.map(c => c.name)], get: s => s.campus },
-          { label: 'Status', options: ['All', 'Active', 'Planned', 'Closed'], get: s => s.status },
-        ]}
+        keyOf={s => s.id}
+        searchText={s => s.name}
+        filters={[{ label: 'Status', options: ['All', 'Active', 'Planned', 'Closed'], get: status }]}
         onAdd={guard(() => setOpen(true))}
         addLabel="Create session"
-        header={<ReadOnlyBanner />}
+        empty={q.loading ? 'Loading…' : 'No sessions'}
+        header={
+          <>
+            <ReadOnlyBanner />
+            {q.error ? <InfoBanner tone="danger" text={q.error} /> : null}
+            <NoApiBanner what="Closing a session or switching the active one (the server only sets it when a session is created)" />
+          </>
+        }
         renderItem={(s, last) => (
           <ListRow
             icon={CalendarDays}
-            title={`${s.name} · ${s.campus}`}
+            title={s.name}
             subtitle={`${s.start} – ${s.end}`}
-            right={
-              <View style={a.right}>
-                <Badge label={s.status} tone={s.status === 'Active' ? 'success' : s.status === 'Planned' ? 'info' : 'neutral'} />
-                {s.status === 'Active' ? (
-                  <Text style={a.small} onPress={() => close(s)}>Close</Text>
-                ) : (
-                  <Text style={a.small} onPress={() => activate(s)}>Make active</Text>
-                )}
-              </View>
-            }
+            right={<Badge label={status(s)} tone={s.isCurrent ? 'success' : s.isClosed ? 'neutral' : 'info'} />}
             last={last}
           />
         )}
       />
-      <FormSheet visible={open} onClose={() => setOpen(false)} title="Create session" onSubmit={create}>
+      <FormSheet visible={open} onClose={() => setOpen(false)} title="Create session" onSubmit={create} submitLabel={add.busy ? 'Saving…' : 'Create'}>
         <Field label="Session" value={f.name} onChangeText={v => setF(x => ({ ...x, name: v }))} />
-        <Field label="Start date" value={f.start} onChangeText={v => setF(x => ({ ...x, start: v }))} />
-        <Field label="End date" value={f.end} onChangeText={v => setF(x => ({ ...x, end: v }))} />
-        <PickerField label="Campus" value={f.campus} options={CAMPUSES.map(c => c.name)} onChange={v => setF(x => ({ ...x, campus: v }))} />
+        <Field label="Start date (YYYY-MM-DD)" value={f.start} onChangeText={v => setF(x => ({ ...x, start: v }))} />
+        <Field label="End date (YYYY-MM-DD)" value={f.end} onChangeText={v => setF(x => ({ ...x, end: v }))} />
+        <View style={a.row}>
+          <Text style={[a.bold, a.flex]}>Make it the active session</Text>
+          <Toggle value={f.makeCurrent} onChange={v => setF(x => ({ ...x, makeCurrent: v }))} />
+        </View>
+        <Text style={a.small}>Only one session is active at a time; the old one becomes read-only.</Text>
       </FormSheet>
-      {prompt}
     </>
   );
 }
 
 export function AdminAcadCopy(_: ScreenProps) {
-  const [sessions] = useSessions();
+  const q = useAcademic();
   const { guard } = useGuard();
-  const names = Array.from(new Set(sessions.map(s => s.name)));
-  const [from, setFrom] = useState('2025-26');
-  const [to, setTo] = useState(names.includes('2027-28') ? '2027-28' : '2026-27');
-  const [what, setWhat] = useState({ classes: true, sections: true, subjects: true, fee: true });
-  const run = guard(() => {
-    if (from === to) {
-      toast('Choose two different sessions');
+  const sessions = q.data?.sessions ?? [];
+  const current = sessions.find(s => s.id === getSession()?.sessionId) ?? sessions.find(s => s.isCurrent);
+  const others = sessions.filter(s => s.id !== current?.id);
+  const [to, setTo] = useState('');
+  const copy = useMutation(webA.copyForward, 'Copied into the new session');
+  const run = guard(async () => {
+    const dest = sessions.find(s => s.name === to);
+    if (!dest) {
+      toast('Choose the session to copy into');
       return;
     }
-    const parts = Object.entries(what).filter(([, v]) => v).map(([k]) => k);
-    if (!parts.length) {
-      toast('Choose at least one item to copy');
+    if (dest.isClosed) {
+      toast('A closed session cannot be changed');
       return;
     }
-    logAudit('Copy forward', `${from} → ${to}: ${parts.join(', ')}`);
-    toast(`Copied ${parts.join(', ')} from ${from} to ${to}`);
+    if ((await copy.run(dest.id)) !== undefined) {
+      logAudit('Copy forward', `${current?.name ?? ''} → ${dest.name}: classes, sections, subjects, fee structure`);
+      refreshAcademic();
+    }
   });
+  if (!q.data) {
+    return (
+      <Screen title="Copy forward">
+        <QueryView q={q}>{() => null}</QueryView>
+      </Screen>
+    );
+  }
   return (
-    <Screen title="Copy forward" subtitle="Start a new session from the last one" footer={<Button label="Copy now" icon={Copy} onPress={run} />}>
+    <Screen title="Copy forward" subtitle="Start a new session from the current one" footer={<Button label="Copy now" icon={Copy} onPress={run} loading={copy.busy} />}>
       <ReadOnlyBanner />
-      <PickerField label="Copy from" value={from} options={names} onChange={setFrom} />
-      <PickerField label="Copy into" value={to} options={names} onChange={setTo} />
       <Card>
-        <ListRow title="Classes" right={<Toggle value={what.classes} onChange={v => setWhat(w => ({ ...w, classes: v }))} />} />
-        <ListRow title="Sections" right={<Toggle value={what.sections} onChange={v => setWhat(w => ({ ...w, sections: v }))} />} />
-        <ListRow title="Subjects and mapping" right={<Toggle value={what.subjects} onChange={v => setWhat(w => ({ ...w, subjects: v }))} />} />
-        <ListRow title="Fee structure" right={<Toggle value={what.fee} onChange={v => setWhat(w => ({ ...w, fee: v }))} />} last />
+        <ListRow title="Copy from" subtitle={current ? `${current.name} (selected session)` : '—'} last />
       </Card>
-      <InfoBanner text="Students are moved with the Promotion wizard, not by copy forward." />
+      {others.length ? (
+        <PickerField label="Copy into" value={to} options={others.map(s => s.name)} onChange={setTo} />
+      ) : (
+        <InfoBanner text="Create the new session first (Sessions), then copy into it." />
+      )}
+      <InfoBanner text="Copies classes, sections, subjects and the fee structure of the selected campus. Students are moved with the Promotion wizard." />
     </Screen>
   );
 }
 
 // ---------- Classes and sections ----------
 
+type SectionRow = { key: string; classId: string; className: string; section: string; capacity: number; room: string; teacherId: number | null; enrolled: number };
+
 export function AdminAcadClasses(_: ScreenProps) {
-  const [list, setList] = useClassSections();
+  const q = useAcademic();
+  const staff = useApi('adm:staff:all', webA.staff);
+  const enrolled = useEnrolled();
   const { guard } = useGuard();
-  const [edit, setEdit] = useState<ClassSection | null>(null);
-  const save = () => {
+  const [edit, setEdit] = useState<(SectionRow & { isNew?: boolean }) | null>(null);
+  const [newClass, setNewClass] = useState<{ name: string; sortOrder: string } | null>(null);
+  const classes = q.data?.classes ?? [];
+  const rows: SectionRow[] = classes.flatMap(c =>
+    c.sections.map(s => ({
+      key: `${c.id}-${s.name}`,
+      classId: c.id,
+      className: c.name,
+      section: s.name,
+      capacity: s.capacity,
+      room: s.room ?? '',
+      teacherId: s.teacherId,
+      enrolled: enrolled[`${c.id}-${s.name}`] ?? 0,
+    })),
+  );
+  const teachers = (staff.data ?? []).map(t => ({ id: Number(t.id), label: `${t.name} (${t.empId})` }));
+  const teacherName = (id: number | null) => (id ? teachers.find(t => t.id === id)?.label ?? `Staff ${id}` : 'No class teacher');
+
+  // The server replaces all sections of a class on save, so always send them all.
+  const saveSection = useMutation(async (e: SectionRow & { isNew?: boolean }) => {
+    const cls = classes.find(c => c.id === e.classId);
+    if (!cls) {
+      throw new Error('Class not found');
+    }
+    const others = cls.sections.filter(s => e.isNew || s.name !== e.section);
+    const sections = [
+      ...others.map(s => ({ name: s.name, capacity: s.capacity, room: s.room ?? undefined, teacherId: s.teacherId ?? undefined })),
+      { name: e.section, capacity: e.capacity, room: e.room || undefined, teacherId: e.teacherId ?? undefined },
+    ];
+    return webA.saveClass({ name: cls.name, sortOrder: cls.sortOrder, sections }, cls.id);
+  }, 'Saved');
+  const addClass = useMutation(
+    (b: { name: string; sortOrder: number }) => webA.saveClass({ ...b, sections: [{ name: 'A', capacity: 40 }] }),
+    'Class added with section A',
+  );
+
+  const save = async () => {
     if (!edit) {
       return;
     }
@@ -207,59 +258,102 @@ export function AdminAcadClasses(_: ScreenProps) {
       toast(`Capacity cannot be below the ${edit.enrolled} students already enrolled`);
       return;
     }
-    if (!edit.room.trim()) {
-      toast('Enter a room');
+    if (!/^[A-Z]{1,2}$/.test(edit.section)) {
+      toast('Section is one or two letters, e.g. A');
       return;
     }
-    const exists = list.some(x => x.id === edit.id);
-    if (!exists && list.some(x => x.className === edit.className && x.section === edit.section)) {
+    if (edit.isNew && rows.some(x => x.classId === edit.classId && x.section === edit.section)) {
       toast('This section already exists');
       return;
     }
-    setList(l => (exists ? l.map(x => (x.id === edit.id ? edit : x)) : [...l, edit]));
-    logAudit('Classes', `${edit.className}-${edit.section}: capacity ${edit.capacity}, teacher ${edit.classTeacher}, room ${edit.room}`);
-    toast('Saved');
-    setEdit(null);
+    if ((await saveSection.run(edit)) !== undefined) {
+      logAudit('Classes', `${edit.className}-${edit.section}: capacity ${edit.capacity}, room ${edit.room || '—'}`);
+      refreshAcademic();
+      setEdit(null);
+    }
   };
-  const toggle = (c: ClassSection) =>
-    guard(() => {
-      setList(l => l.map(x => (x.id === c.id ? { ...x, active: !x.active } : x)));
-      logAudit('Classes', `${c.className}-${c.section} ${c.active ? 'deactivated' : 'activated'}`);
-      toast(c.enrolled ? 'Section has linked students, so it is deactivated, not deleted' : 'Updated');
-    })();
+  const saveClass = async () => {
+    if (!newClass || !newClass.name.trim()) {
+      toast('Enter the class name');
+      return;
+    }
+    if (classes.some(c => c.name.toLowerCase() === newClass.name.trim().toLowerCase())) {
+      toast('This class already exists');
+      return;
+    }
+    if ((await addClass.run({ name: newClass.name.trim(), sortOrder: Number(newClass.sortOrder) || classes.length })) !== undefined) {
+      logAudit('Classes', `Added class ${newClass.name}`);
+      refreshAcademic();
+      setNewClass(null);
+    }
+  };
   return (
     <>
       <ListScreen
         title="Classes and sections"
-        subtitle="Playgroup to Matric"
-        items={list}
-        keyOf={c => c.id}
-        searchText={c => `${c.className} ${c.section} ${c.classTeacher} ${c.room}`}
-        filters={[
-          { label: 'Class', options: ['All', ...CLASSES], get: c => c.className },
-          { label: 'Status', options: ['All', 'Active', 'Inactive'], get: c => (c.active ? 'Active' : 'Inactive') },
-        ]}
-        onAdd={guard(() => setEdit({ id: localId('cs'), className: 'Class 1', section: 'C', capacity: 30, enrolled: 0, classTeacher: TEACHER_NAMES[0], room: 'R130', active: true }))}
+        subtitle={`${classes.length} classes · ${rows.length} sections`}
+        items={rows}
+        keyOf={c => c.key}
+        searchText={c => `${c.className} ${c.section} ${c.room}`}
+        filters={[{ label: 'Class', options: ['All', ...classes.map(c => c.name)], get: c => c.className }]}
+        onAdd={guard(() =>
+          setEdit(
+            classes[0]
+              ? { key: 'new', classId: classes[0].id, className: classes[0].name, section: 'B', capacity: 40, room: '', teacherId: null, enrolled: 0, isNew: true }
+              : null,
+          ),
+        )}
         addLabel="Add section"
-        header={<ReadOnlyBanner />}
+        empty={q.loading ? 'Loading…' : 'No classes yet'}
+        header={
+          <>
+            <ReadOnlyBanner />
+            {q.error ? <InfoBanner tone="danger" text={q.error} /> : null}
+            <Button label="Add class" variant="outline" icon={School} onPress={guard(() => setNewClass({ name: '', sortOrder: String(classes.length) }))} />
+          </>
+        }
         renderItem={(c, last) => (
           <ListRow
             icon={School}
             title={`${c.className}-${c.section}`}
-            subtitle={`${c.enrolled}/${c.capacity} students · ${c.classTeacher} · Room ${c.room}`}
-            right={<Toggle value={c.active} onChange={() => toggle(c)} />}
+            subtitle={`${c.enrolled}/${c.capacity} students · ${teacherName(c.teacherId)}${c.room ? ` · Room ${c.room}` : ''}`}
             onPress={guard(() => setEdit(c))}
+            chevron
             last={last}
           />
         )}
       />
       {edit ? (
-        <FormSheet visible onClose={() => setEdit(null)} title={`${edit.className}-${edit.section}`} onSubmit={save}>
-          <PickerField label="Class" value={edit.className} options={CLASSES} onChange={v => setEdit({ ...edit, className: v })} />
-          <Field label="Section" value={edit.section} onChangeText={v => setEdit({ ...edit, section: v.toUpperCase().slice(0, 2) })} />
+        <FormSheet visible onClose={() => setEdit(null)} title={edit.isNew ? 'Add section' : `${edit.className}-${edit.section}`} onSubmit={save} submitLabel={saveSection.busy ? 'Saving…' : 'Save'}>
+          {edit.isNew ? (
+            <PickerField
+              label="Class"
+              value={edit.className}
+              options={classes.map(c => c.name)}
+              onChange={v => {
+                const c = classes.find(x => x.name === v);
+                if (c) {
+                  setEdit({ ...edit, classId: c.id, className: c.name });
+                }
+              }}
+            />
+          ) : null}
+          <Field label="Section" value={edit.section} editable={!!edit.isNew} onChangeText={v => setEdit({ ...edit, section: v.toUpperCase().slice(0, 2) })} />
           <Field label="Capacity" value={String(edit.capacity)} keyboardType="number-pad" onChangeText={v => setEdit({ ...edit, capacity: Number(v.replace(/\D/g, '')) || 0 })} />
-          <PickerField label="Class teacher" value={edit.classTeacher} options={TEACHER_NAMES} onChange={v => setEdit({ ...edit, classTeacher: v })} />
+          <PickerField
+            label="Class teacher"
+            value={edit.teacherId ? teacherName(edit.teacherId) : ''}
+            options={teachers.map(t => t.label)}
+            onChange={v => setEdit({ ...edit, teacherId: teachers.find(t => t.label === v)?.id ?? null })}
+          />
           <Field label="Room" value={edit.room} onChangeText={v => setEdit({ ...edit, room: v })} />
+          <Text style={a.small}>Removing a section is not possible while it has students; it can only be made inactive by the platform team.</Text>
+        </FormSheet>
+      ) : null}
+      {newClass ? (
+        <FormSheet visible onClose={() => setNewClass(null)} title="Add class" onSubmit={saveClass} submitLabel={addClass.busy ? 'Saving…' : 'Add class'}>
+          <Field label="Class name" value={newClass.name} onChangeText={v => setNewClass({ ...newClass, name: v })} placeholder="e.g. Class 11" />
+          <Field label="Order" value={newClass.sortOrder} keyboardType="number-pad" onChangeText={v => setNewClass({ ...newClass, sortOrder: v })} />
         </FormSheet>
       ) : null}
     </>
@@ -268,11 +362,15 @@ export function AdminAcadClasses(_: ScreenProps) {
 
 // ---------- Subjects ----------
 
+type SubjectDraft = { code: string; name: string; type: string; kind: string };
+
 export function AdminAcadSubjects(_: ScreenProps) {
-  const [list, setList] = useSubjects();
+  const q = useAcademic();
   const { guard } = useGuard();
-  const [edit, setEdit] = useState<(SubjectRow & { isNew?: boolean }) | null>(null);
-  const save = () => {
+  const [edit, setEdit] = useState<SubjectDraft | null>(null);
+  const add = useMutation(webA.addSubject, 'Subject added');
+  const list = q.data?.subjects ?? [];
+  const save = async () => {
     if (!edit) {
       return;
     }
@@ -280,14 +378,17 @@ export function AdminAcadSubjects(_: ScreenProps) {
       toast('Enter a name and a 2–4 letter code');
       return;
     }
-    if (edit.isNew && list.some(s => s.code === edit.code)) {
+    if (list.some(s => s.code === edit.code)) {
       toast('Subject code must be unique');
       return;
     }
-    const { isNew, ...row } = edit;
-    setList(l => (isNew ? [...l, row] : l.map(s => (s.code === row.code ? row : s))));
-    logAudit('Subjects', `${isNew ? 'Added' : 'Edited'} ${row.code} ${row.name} (${row.type}, ${row.kind})`);
-    setEdit(null);
+    // The server takes Theory | Practical | Both.
+    const theoryPrac = edit.kind === 'Theory + Practical' ? 'Both' : edit.kind;
+    if ((await add.run({ code: edit.code, name: edit.name.trim(), type: edit.type, theoryPrac })) !== undefined) {
+      logAudit('Subjects', `Added ${edit.code} ${edit.name} (${edit.type}, ${edit.kind})`);
+      refreshAcademic();
+      setEdit(null);
+    }
   };
   return (
     <>
@@ -295,37 +396,27 @@ export function AdminAcadSubjects(_: ScreenProps) {
         title="Subjects"
         subtitle="Subject master"
         items={list}
-        keyOf={s => s.code}
+        keyOf={s => s.id}
         searchText={s => `${s.name} ${s.code}`}
         filters={[{ label: 'Type', options: ['All', 'Core', 'Elective', 'Optional'], get: s => s.type }]}
-        onAdd={guard(() => setEdit({ code: '', name: '', type: 'Core', kind: 'Theory', active: true, isNew: true }))}
+        onAdd={guard(() => setEdit({ code: '', name: '', type: 'Core', kind: 'Theory' }))}
         addLabel="Add subject"
-        header={<ReadOnlyBanner />}
+        empty={q.loading ? 'Loading…' : 'No subjects yet'}
+        header={
+          <>
+            <ReadOnlyBanner />
+            {q.error ? <InfoBanner tone="danger" text={q.error} /> : null}
+            <InfoBanner text="Subjects with marks or timetable slots are never deleted. The server has no edit or deactivate for subjects yet." />
+          </>
+        }
         renderItem={(s, last) => (
-          <ListRow
-            icon={BookOpen}
-            title={`${s.code} · ${s.name}`}
-            subtitle={`${s.type} · ${s.kind}`}
-            right={
-              <Toggle
-                value={s.active}
-                onChange={() =>
-                  guard(() => {
-                    setList(l => l.map(x => (x.code === s.code ? { ...x, active: !x.active } : x)));
-                    logAudit('Subjects', `${s.code} ${s.active ? 'deactivated' : 'activated'} (never deleted)`);
-                  })()
-                }
-              />
-            }
-            onPress={guard(() => setEdit(s))}
-            last={last}
-          />
+          <ListRow icon={BookOpen} title={`${s.code} · ${s.name}`} subtitle={s.type} last={last} />
         )}
       />
       {edit ? (
-        <FormSheet visible onClose={() => setEdit(null)} title={edit.isNew ? 'Add subject' : edit.name} onSubmit={save}>
+        <FormSheet visible onClose={() => setEdit(null)} title="Add subject" onSubmit={save} submitLabel={add.busy ? 'Saving…' : 'Save'}>
           <Field label="Name" value={edit.name} onChangeText={v => setEdit({ ...edit, name: v })} />
-          <Field label="Code" value={edit.code} editable={!!edit.isNew} autoCapitalize="characters" onChangeText={v => setEdit({ ...edit, code: v.toUpperCase() })} />
+          <Field label="Code" value={edit.code} autoCapitalize="characters" onChangeText={v => setEdit({ ...edit, code: v.toUpperCase() })} />
           <PickerField label="Type" value={edit.type} options={['Core', 'Elective', 'Optional']} onChange={v => setEdit({ ...edit, type: v })} />
           <PickerField label="Theory / practical" value={edit.kind} options={['Theory', 'Practical', 'Theory + Practical']} onChange={v => setEdit({ ...edit, kind: v })} />
         </FormSheet>
@@ -335,38 +426,63 @@ export function AdminAcadSubjects(_: ScreenProps) {
 }
 
 export function AdminAcadMapping(_: ScreenProps) {
-  const [map, setMap] = useMapping();
-  const [subjects] = useSubjects();
+  const q = useAcademic();
   const { guard, ro } = useGuard();
-  const [cls, setCls] = useState('Class 5');
-  const [draft, setDraft] = useState<string[]>(map[cls] ?? []);
-  const pick = (c: string) => {
-    setCls(c);
-    setDraft(map[c] ?? []);
-  };
-  const save = guard(() => {
-    if (!draft.length) {
+  const classes = q.data?.classes ?? [];
+  const subjects = q.data?.subjects ?? [];
+  const [clsId, setClsId] = useState('');
+  const cls = classes.find(c => c.id === clsId) ?? classes[0];
+  const map = useApi(cls ? `adm:classSubjects:${cls.id}` : null, () => webA.classSubjects(cls?.id ?? ''));
+  const [draft, setDraft] = useState<string[] | null>(null);
+  const serverIds = ((map.data as unknown[] | undefined) ?? []).map(String);
+  const chosen = draft ?? serverIds;
+  const saver = useMutation((ids: string[]) => webA.saveClassSubjects(cls?.id ?? '', ids), 'Mapping saved');
+  const save = guard(async () => {
+    if (!cls) {
+      return;
+    }
+    if (!chosen.length) {
       toast('A class needs at least one subject');
       return;
     }
-    setMap(m => ({ ...m, [cls]: draft }));
-    logAudit('Class subjects', `${cls}: ${draft.join(', ')}`);
-    toast('Mapping saved');
+    if ((await saver.run(chosen)) !== undefined) {
+      logAudit('Class subjects', `${cls.name}: ${subjects.filter(s => chosen.includes(s.id)).map(s => s.code).join(', ')}`);
+      setDraft(null);
+      map.refresh();
+    }
   });
+  if (!q.data) {
+    return (
+      <Screen title="Class-subject mapping">
+        <QueryView q={q}>{() => null}</QueryView>
+      </Screen>
+    );
+  }
   return (
-    <Screen title="Class-subject mapping" subtitle="Subjects taught in each class" footer={<Button label="Save mapping" onPress={save} />}>
+    <Screen title="Class-subject mapping" subtitle="Subjects taught in each class" footer={<Button label="Save mapping" onPress={save} loading={saver.busy} />}>
       <ReadOnlyBanner />
-      <PickerField label="Class" value={cls} options={CLASSES} onChange={pick} />
+      <PickerField
+        label="Class"
+        value={cls?.name ?? ''}
+        options={classes.map(c => c.name)}
+        onChange={v => {
+          setClsId(classes.find(c => c.name === v)?.id ?? '');
+          setDraft(null);
+        }}
+      />
+      {map.error ? <InfoBanner tone="danger" text={map.error} /> : null}
+      {map.loading ? <Loading /> : null}
       <Card>
-        {subjects.filter(s => s.active).map((s, i, arr) => (
+        {subjects.length === 0 ? <Text style={a.small}>Add subjects first.</Text> : null}
+        {subjects.map((s, i, arr) => (
           <ListRow
-            key={s.code}
+            key={s.id}
             title={`${s.code} · ${s.name}`}
-            subtitle={`${s.type} · ${s.kind}`}
+            subtitle={s.type}
             right={
               <Toggle
-                value={draft.includes(s.code)}
-                onChange={on => (ro ? toast('This session is closed and read-only.') : setDraft(d => (on ? [...d, s.code] : d.filter(x => x !== s.code))))}
+                value={chosen.includes(s.id)}
+                onChange={on => (ro ? toast('This session is closed and read-only.') : setDraft(on ? [...chosen, s.id] : chosen.filter(x => x !== s.id)))}
               />
             }
             last={i === arr.length - 1}
@@ -401,7 +517,12 @@ export function AdminAcadTerms(_: ScreenProps) {
         searchText={t => t.name}
         onAdd={guard(() => setEdit({ id: localId('tm'), name: '', from: '', to: '' }))}
         addLabel="Add term"
-        header={<ReadOnlyBanner />}
+        header={
+          <>
+            <ReadOnlyBanner />
+            <NoApiBanner what="Terms" />
+          </>
+        }
         renderItem={(t, last) => (
           <ListRow icon={Layers} title={t.name} subtitle={`${t.from} – ${t.to}`} onPress={guard(() => setEdit(t))} chevron last={last} />
         )}

@@ -1,0 +1,717 @@
+{
+ "/api/mobile/teacher/today": {
+  "data": {
+   "date": "2026-11-03",
+   "periods": [
+    {
+     "period": 1,
+     "classId": 17,
+     "section": "A",
+     "subjectId": 7
+    },
+    {
+     "period": 2,
+     "classId": 17,
+     "section": "A",
+     "subjectId": 8
+    },
+    {
+     "period": 4,
+     "classId": 18,
+     "section": "A",
+     "subjectId": 7
+    }
+   ],
+   "substitutions": [
+    {
+     "id": 1,
+     "uuid": "sub1",
+     "title": "Cover Class 7-B Science",
+     "status": "assigned",
+     "recordDate": "2026-11-03",
+     "period": 5,
+     "className": "Class 7-B",
+     "note": "Mr. Faisal on leave"
+    }
+   ],
+   "classes": [
+    {
+     "classId": 17,
+     "section": "A",
+     "subjectId": 7,
+     "className": "Class 5",
+     "subject": "English"
+    },
+    {
+     "classId": 17,
+     "section": "A",
+     "subjectId": 8,
+     "className": "Class 5",
+     "subject": "Mathematics"
+    },
+    {
+     "classId": 18,
+     "section": "A",
+     "subjectId": 7,
+     "className": "Class 6",
+     "subject": "English"
+    }
+   ]
+  }
+ },
+ "/api/mobile/teacher/timetable": {
+  "data": {
+   "days": [
+    "Mon",
+    "Tue",
+    "Wed",
+    "Thu",
+    "Fri",
+    "Sat"
+   ],
+   "periods": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+   ],
+   "slots": [
+    {
+     "day": "Mon",
+     "period": 1,
+     "classId": 17,
+     "section": "A",
+     "subjectId": 7,
+     "subject": "English"
+    },
+    {
+     "day": "Mon",
+     "period": 2,
+     "classId": 17,
+     "section": "A",
+     "subjectId": 8,
+     "subject": "Mathematics"
+    },
+    {
+     "day": "Tue",
+     "period": 1,
+     "classId": 18,
+     "section": "A",
+     "subjectId": 7,
+     "subject": "English"
+    },
+    {
+     "day": "Tue",
+     "period": 4,
+     "classId": 18,
+     "section": "A",
+     "subjectId": 7,
+     "subject": "English"
+    }
+   ],
+   "substitutions": [
+    {
+     "id": 1,
+     "uuid": "sub1",
+     "title": "Cover Class 7-B Science",
+     "status": "assigned",
+     "recordDate": "2026-11-03",
+     "period": 5,
+     "className": "Class 7-B",
+     "note": "Mr. Faisal on leave"
+    }
+   ]
+  }
+ },
+ "/api/mobile/teacher/attendance": {
+  "data": {
+   "marked": false,
+   "students": [
+    {
+     "id": "42",
+     "name": "Ayesha Test",
+     "grNo": "GR-MC-0002",
+     "mark": "P"
+    },
+    {
+     "id": "43",
+     "name": "Ahmed Test",
+     "grNo": "GR-MC-0003",
+     "mark": "P"
+    },
+    {
+     "id": "44",
+     "name": "Fatima Noor",
+     "grNo": "GR-MC-0004",
+     "mark": "P"
+    },
+    {
+     "id": "45",
+     "name": "Hamza Ali",
+     "grNo": "GR-MC-0005",
+     "mark": "L"
+    }
+   ]
+  }
+ },
+ "POST /api/mobile/teacher/attendance": {
+  "data": {
+   "saved": 4,
+   "cutoff": "10:00"
+  }
+ },
+ "POST /api/mobile/teacher/attendance/exceptions": {
+  "data": {
+   "id": 7,
+   "uuid": "ex7",
+   "title": "45",
+   "status": "late",
+   "recordDate": "2026-11-03",
+   "studentId": 45,
+   "type": "late",
+   "time": "08:20",
+   "date": "2026-11-03"
+  }
+ },
+ "/api/mobile/teacher/diary": {
+  "data": [
+   {
+    "id": 1,
+    "school_id": 3,
+    "campus_id": 4,
+    "class_id": 17,
+    "section": "A",
+    "subject_id": 7,
+    "staff_id": 9,
+    "entry_date": "2026-11-03",
+    "topic": "Lesson 7 The Honest Woodcutter",
+    "homework": "Learn 10 new words"
+   }
+  ]
+ },
+ "POST /api/mobile/teacher/diary": {
+  "data": {
+   "id": 3,
+   "date": "2026-11-03",
+   "topic": "Fractions",
+   "homework": "Ex 4.2"
+  }
+ },
+ "/api/mobile/teacher/homework": {
+  "data": [
+   {
+    "id": 1,
+    "title": "Fractions worksheet",
+    "dueDate": "2026-10-20",
+    "classId": 17,
+    "section": "A",
+    "submitted": 2,
+    "submissions": [
+     {
+      "id": 11,
+      "uuid": "hs11",
+      "title": "Done all 10",
+      "status": "submitted",
+      "recordDate": "2026-10-21",
+      "homeworkId": 1,
+      "studentId": 42,
+      "note": "Done all 10. Q7 was hard.",
+      "fileUrl": "/uploads/homework/homework-1.jpg"
+     },
+     {
+      "id": 12,
+      "uuid": "hs12",
+      "title": "Homework",
+      "status": "graded",
+      "recordDate": "2026-10-19",
+      "homeworkId": 1,
+      "studentId": 43,
+      "note": "Done",
+      "marks": 8,
+      "comment": "Good"
+     }
+    ]
+   },
+   {
+    "id": 2,
+    "title": "My hero essay",
+    "dueDate": "2099-01-01",
+    "classId": 17,
+    "section": "A",
+    "submitted": 0,
+    "submissions": []
+   }
+  ]
+ },
+ "POST /api/mobile/teacher/homework": {
+  "data": {
+   "id": 3,
+   "title": "Algebra",
+   "dueDate": "2026-11-03"
+  }
+ },
+ "PUT /api/mobile/teacher/homework/:id/grade": {
+  "data": {
+   "id": 11,
+   "uuid": "hs11",
+   "title": "Done all 10",
+   "status": "graded",
+   "recordDate": "2026-11-03",
+   "marks": 9,
+   "comment": "Good"
+  }
+ },
+ "/api/mobile/teacher/marks": {
+  "data": {
+   "exam": {
+    "id": 1,
+    "name": "Mid-term 2026",
+    "marksOpen": true,
+    "locked": false,
+    "status": "draft"
+   },
+   "students": [
+    {
+     "id": 42,
+     "name": "Ayesha Test",
+     "grNo": "GR-MC-0002",
+     "marks": 92,
+     "max": 100
+    },
+    {
+     "id": 43,
+     "name": "Ahmed Test",
+     "grNo": "GR-MC-0003",
+     "marks": null,
+     "max": 100
+    },
+    {
+     "id": 44,
+     "name": "Fatima Noor",
+     "grNo": "GR-MC-0004",
+     "marks": null,
+     "max": 100
+    },
+    {
+     "id": 45,
+     "name": "Hamza Ali",
+     "grNo": "GR-MC-0005",
+     "marks": null,
+     "max": 100
+    }
+   ]
+  }
+ },
+ "POST /api/mobile/teacher/marks": {
+  "data": {
+   "saved": 3
+  }
+ },
+ "/api/mobile/teacher/students": {
+  "data": [
+   {
+    "classId": 17,
+    "section": "A",
+    "students": [
+     {
+      "id": 42,
+      "name": "Ayesha Test",
+      "grNo": "GR-MC-0002",
+      "rollNo": "5A-01",
+      "classId": 17,
+      "className": "Class 5",
+      "section": "A",
+      "father": "Imran Test",
+      "mother": null,
+      "mobile": "0300-7654321",
+      "photoUrl": null,
+      "dob": "2016-03-14",
+      "gender": "F",
+      "address": "Model Town",
+      "campusId": 4
+     },
+     {
+      "id": 43,
+      "name": "Ahmed Test",
+      "grNo": "GR-MC-0003",
+      "rollNo": "5A-02",
+      "classId": 17,
+      "className": "Class 5",
+      "section": "A",
+      "father": "Imran Test",
+      "mother": null,
+      "mobile": "0300-7654321",
+      "photoUrl": null,
+      "dob": "2016-03-14",
+      "gender": "M",
+      "address": "Model Town",
+      "campusId": 4
+     },
+     {
+      "id": 44,
+      "name": "Fatima Noor",
+      "grNo": "GR-MC-0004",
+      "rollNo": "5A-03",
+      "classId": 17,
+      "className": "Class 5",
+      "section": "A",
+      "father": "Imran Test",
+      "mother": null,
+      "mobile": "0300-7654321",
+      "photoUrl": null,
+      "dob": "2016-03-14",
+      "gender": "F",
+      "address": "Model Town",
+      "campusId": 4
+     },
+     {
+      "id": 45,
+      "name": "Hamza Ali",
+      "grNo": "GR-MC-0005",
+      "rollNo": "5A-04",
+      "classId": 17,
+      "className": "Class 5",
+      "section": "A",
+      "father": "Imran Test",
+      "mother": null,
+      "mobile": "0300-7654321",
+      "photoUrl": null,
+      "dob": "2016-03-14",
+      "gender": "M",
+      "address": "Model Town",
+      "campusId": 4
+     }
+    ]
+   },
+   {
+    "classId": 18,
+    "section": "A",
+    "students": [
+     {
+      "id": 142,
+      "name": "Hira Saleem",
+      "grNo": "GR-MC-0142",
+      "rollNo": "5A-03",
+      "classId": 18,
+      "className": "Class 6",
+      "section": "A",
+      "father": "Imran Test",
+      "mother": null,
+      "mobile": "0300-7654321",
+      "photoUrl": null,
+      "dob": "2016-03-14",
+      "gender": "F",
+      "address": "Model Town",
+      "campusId": 4
+     },
+     {
+      "id": 143,
+      "name": "Bilal Ahmed",
+      "grNo": "GR-MC-0143",
+      "rollNo": "5A-02",
+      "classId": 18,
+      "className": "Class 6",
+      "section": "A",
+      "father": "Imran Test",
+      "mother": null,
+      "mobile": "0300-7654321",
+      "photoUrl": null,
+      "dob": "2016-03-14",
+      "gender": "M",
+      "address": "Model Town",
+      "campusId": 4
+     }
+    ]
+   }
+  ]
+ },
+ "/api/mobile/teacher/students/:id": {
+  "data": {
+   "student": {
+    "id": 42,
+    "name": "Ayesha Test",
+    "grNo": "GR-MC-0002",
+    "rollNo": "5A-01",
+    "classId": 17,
+    "className": "Class 5",
+    "section": "A",
+    "father": "Imran Test",
+    "mother": null,
+    "mobile": "0300-7654321",
+    "photoUrl": null,
+    "dob": "2016-03-14",
+    "gender": "F",
+    "address": "Model Town",
+    "campusId": 4
+   },
+   "attendance": [
+    {
+     "date": "2026-11-03",
+     "mark": "P"
+    },
+    {
+     "date": "2026-10-30",
+     "mark": "A"
+    }
+   ],
+   "results": [
+    {
+     "subject": "English",
+     "marks": 92,
+     "max": 100
+    },
+    {
+     "subject": "Mathematics",
+     "marks": 88,
+     "max": 100
+    }
+   ],
+   "health": [
+    {
+     "id": 5,
+     "uuid": "h5",
+     "title": "Positive",
+     "status": "behavior",
+     "recordDate": "2026-10-20",
+     "studentId": 42,
+     "kind": "behavior",
+     "points": 2,
+     "note": "Helped a classmate"
+    },
+    {
+     "id": 6,
+     "uuid": "h6",
+     "title": "Sick bay",
+     "status": "sickbay",
+     "recordDate": "2026-10-15",
+     "studentId": 42,
+     "kind": "sickbay",
+     "note": "Headache, rested 30 min"
+    }
+   ]
+  }
+ },
+ "POST /api/mobile/teacher/health": {
+  "data": {
+   "id": 8,
+   "uuid": "h8",
+   "title": "Positive",
+   "status": "behavior",
+   "recordDate": "2026-11-03",
+   "studentId": 42,
+   "kind": "behavior",
+   "points": 2,
+   "note": "Helped"
+  }
+ },
+ "/api/mobile/teacher/leaves": {
+  "data": [
+   {
+    "id": 4,
+    "uuid": "lv4",
+    "school_id": 3,
+    "kind": "student",
+    "staff_id": null,
+    "student_id": 43,
+    "leave_type": "Sick",
+    "from_date": "2026-11-05",
+    "to_date": "2026-11-06",
+    "days": "2.0",
+    "reason": "Fever since last night",
+    "status": "pending"
+   },
+   {
+    "id": 3,
+    "uuid": "lv3",
+    "school_id": 3,
+    "kind": "student",
+    "staff_id": null,
+    "student_id": 44,
+    "leave_type": "Casual",
+    "from_date": "2026-10-02",
+    "to_date": "2026-10-03",
+    "days": "2.0",
+    "reason": "Family wedding",
+    "status": "approved"
+   }
+  ]
+ },
+ "POST /api/mobile/teacher/leaves/:id/decide": {
+  "data": {
+   "id": 4,
+   "status": "approved"
+  }
+ },
+ "/api/mobile/teacher/curriculum": {
+  "data": [
+   {
+    "id": 21,
+    "uuid": "c21",
+    "title": "1. My School",
+    "status": "done",
+    "recordDate": "2026-04-20",
+    "kind": "chapter"
+   },
+   {
+    "id": 22,
+    "uuid": "c22",
+    "title": "2. Seasons",
+    "status": "planned",
+    "recordDate": "2026-05-15",
+    "kind": "chapter"
+   },
+   {
+    "id": 23,
+    "uuid": "c23",
+    "title": "Week of Mon 19 Oct · Class 5-A",
+    "status": "approved",
+    "recordDate": "2026-10-17",
+    "kind": "lesson-plan",
+    "objectives": "Lesson 7",
+    "comment": "Good plan"
+   }
+  ]
+ },
+ "/api/mobile/teacher/my-attendance": {
+  "data": {
+   "month": "2026-11",
+   "days": [
+    {
+     "date": "2026-11-03",
+     "status": "present",
+     "timeIn": "07:52",
+     "timeOut": null
+    },
+    {
+     "date": "2026-10-21",
+     "status": "late",
+     "timeIn": "08:06",
+     "timeOut": "14:02"
+    }
+   ],
+   "policies": [
+    {
+     "id": 1,
+     "school_id": 3,
+     "leave_type": "Casual",
+     "quota": 10
+    },
+    {
+     "id": 2,
+     "school_id": 3,
+     "leave_type": "Sick",
+     "quota": 8
+    },
+    {
+     "id": 3,
+     "school_id": 3,
+     "leave_type": "Annual",
+     "quota": 24
+    }
+   ],
+   "leaves": [
+    {
+     "id": 9,
+     "kind": "staff",
+     "leave_type": "Casual",
+     "from_date": "2026-10-02",
+     "to_date": "2026-10-04",
+     "days": 3,
+     "reason": "Family",
+     "status": "approved",
+     "staff_id": 9
+    }
+   ]
+  }
+ },
+ "POST /api/mobile/teacher/leave": {
+  "data": {
+   "id": 10,
+   "kind": "staff",
+   "leave_type": "Casual",
+   "from_date": "2026-11-03",
+   "to_date": "2026-11-03",
+   "days": 1,
+   "reason": "Personal",
+   "status": "pending"
+  }
+ },
+ "/api/mobile/teacher/salary": {
+  "data": [
+   {
+    "id": 2,
+    "month": "2026-10",
+    "basic": 54000,
+    "allowances": 5000,
+    "deductions": 7340,
+    "net": 51660,
+    "status": "paid"
+   },
+   {
+    "id": 1,
+    "month": "2026-09",
+    "basic": 54000,
+    "allowances": 5000,
+    "deductions": 370,
+    "net": 58630,
+    "status": "paid"
+   }
+  ]
+ },
+ "POST /api/mobile/teacher/messages": {
+  "data": {
+   "noticeId": 5,
+   "queued": 4
+  }
+ },
+ "/api/mobile/teacher/reports": {
+  "data": [
+   {
+    "classId": 17,
+    "section": "A",
+    "students": 4
+   },
+   {
+    "classId": 18,
+    "section": "A",
+    "students": 2
+   }
+  ]
+ },
+ "/api/mobile/notices": {
+  "data": [
+   {
+    "id": 2,
+    "title": "Staff meeting",
+    "body": "Saturday 10:30 in the staff room",
+    "bodyUrdu": null,
+    "audience": "staff",
+    "at": "2026-10-28T09:00:00.000Z"
+   }
+  ]
+ },
+ "/api/mobile/calendar": {
+  "data": [
+   {
+    "id": 1,
+    "title": "Parent-teacher meeting",
+    "date": "2026-11-14",
+    "kind": "event"
+   }
+  ]
+ },
+ "/api/mobile/leave": {
+  "data": []
+ },
+ "/api/mobile/settings": {
+  "data": {
+   "locale": "en",
+   "notifications": true,
+   "rtl": false
+  }
+ }
+}

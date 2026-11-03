@@ -41,6 +41,8 @@ export type AcademicSession = { id: string; name: string; isCurrent: boolean; is
 export type ApiSession = {
   token: string;
   exp: number; // unix seconds
+  refreshToken?: string; // rotates on every refresh (server fix H1)
+  refreshExp?: number;
   user: SessionUser;
   schoolCode: string;
   campusId?: string;
@@ -97,6 +99,11 @@ export function isExpired(s: ApiSession | null, marginSec = 30) {
   return !s || s.exp * 1000 < Date.now() + marginSec * 1000;
 }
 
+// The session can still be renewed when the refresh token is valid.
+export function canRefresh(s: ApiSession | null) {
+  return !!s?.refreshToken && (s.refreshExp ?? 0) * 1000 > Date.now() + 30 * 1000;
+}
+
 export async function saveSession(s: ApiSession | null) {
   setShared(KEY, s);
   try {
@@ -121,7 +128,7 @@ export async function restoreSession(): Promise<ApiSession | null> {
   try {
     const raw = await AsyncStorage.getItem(STORAGE_KEY);
     const s = raw ? (JSON.parse(raw) as ApiSession) : null;
-    if (s && !isExpired(s)) {
+    if (s && (!isExpired(s) || canRefresh(s))) {
       setShared(KEY, s);
       return s;
     }

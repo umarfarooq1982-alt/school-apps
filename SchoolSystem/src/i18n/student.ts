@@ -39,6 +39,12 @@ const student: Record<string, string> = {
   'Save password': 'پاس ورڈ محفوظ کریں',
   'GR No.': 'جی آر نمبر',
   "Ask for a code on parent's mobile": 'والدین کے موبائل پر کوڈ منگوائیں',
+  'Write an answer first': 'پہلے جواب لکھیں',
+  'No instructions.': 'کوئی ہدایات نہیں۔',
+  'Photo and PDF upload is coming soon. Type your answer for now.':
+    'تصویر اور پی ڈی ایف کی سہولت جلد آ رہی ہے۔ ابھی جواب لکھیں۔',
+  'This homework was not found.': 'یہ ہوم ورک نہیں ملا۔',
+  'Digital ID card': 'ڈیجیٹل شناختی کارڈ',
 };
 
 export default student;

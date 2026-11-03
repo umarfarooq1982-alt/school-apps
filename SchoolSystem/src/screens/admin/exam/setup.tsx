@@ -1,4 +1,6 @@
 // Exam panel: exam setup, date sheet, invigilation and seating (M-12).
+// Exams are live (/api/web/modules/exams); papers and invigilation duties are
+// "datesheet" and "invigilation" module records.
 import React, { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Armchair, CalendarRange, Pencil, Plus, Printer, Send } from 'lucide-react-native';
@@ -13,26 +15,30 @@ import {
   toast,
 } from '../../../components/ui';
 import { FormSheet, KV, ListScreen, PickerField, adminStyles } from '../../../components/admin';
+import { NoApiBanner, QueryView } from '../../../components/states';
 import { colors, radius } from '../../../theme';
 import { ScreenProps, useNav } from '../../../navigation';
 import { logAudit } from '../../../data/admin';
 import {
-  DATES,
+  Duty,
   ExamType,
   GradeBand,
-  RESULT_CLASSES,
   RESULT_SUBJECTS,
   ROOMS,
   TEACHERS,
   TIMES,
-  classMarks,
+  examDays,
   useDuties,
   useExamTypes,
+  useExams,
   useGrading,
   usePapers,
   usePassRules,
   usePublished,
 } from '../../../data/admin-exam';
+import { useLiveClasses, useLiveStudents } from '../../../data/admin-frontdesk';
+import { useApi } from '../../../api/hooks';
+import { webA } from '../../../api/webA';
 import { ReadOnlyBanner, isNum, useGuard } from '../frontdesk/util';
 
 // ---------- Exam setup ----------
@@ -48,6 +54,9 @@ export function AdminExamSetup(_: ScreenProps) {
   const [bandForm, setBandForm] = useState({ min: '', grade: '', remark: '' });
   const [rulesOpen, setRulesOpen] = useState(false);
   const [rulesForm, setRulesForm] = useState({ overall: '', subject: '', maxFail: '' });
+  const [exams, setExams, examsQ] = useExams();
+  const [examOpen, setExamOpen] = useState(false);
+  const [examForm, setExamForm] = useState({ name: '', start: '', end: '' });
   const totalWeight = types.reduce((s, t) => s + t.weight, 0);
 
   const openType = (i: number | null) => {
@@ -94,9 +103,42 @@ export function AdminExamSetup(_: ScreenProps) {
     setEditBand(null);
   };
 
+  const addExam = () => {
+    const name = examForm.name.trim();
+    const iso = /^\d{4}-\d{2}-\d{2}$/;
+    if (!name || !iso.test(examForm.start) || !iso.test(examForm.end) || examForm.end < examForm.start) {
+      toast('Enter a name and start / end dates as YYYY-MM-DD (end on or after start)');
+      return;
+    }
+    if (exams.some(e => e.name.toLowerCase() === name.toLowerCase())) {
+      toast(`${name} already exists`);
+      return;
+    }
+    setExams(list => [...list, { id: `new-${Date.now()}`, name, start: examForm.start, end: examForm.end, marksOpen: true, locked: false, status: 'draft' }]);
+    logAudit('Exam setup', `Exam ${name}: ${examForm.start} to ${examForm.end}`);
+    setExamOpen(false);
+  };
+
   return (
-    <Screen title="Exam setup" subtitle="Exam types, weightage, grading scale and pass rules">
+    <Screen title="Exam setup" subtitle="Exams, weightage, grading scale and pass rules" refreshing={examsQ.refreshing} onRefresh={examsQ.refresh}>
       <ReadOnlyBanner />
+      <Card title="Exams this session" action={{ label: 'Add', onPress: guard(() => setExamOpen(true)) }}>
+        <QueryView q={examsQ} isEmpty={d => d.length === 0} emptyText="No exams yet">
+          {() =>
+            exams.map((e, i) => (
+              <ListRow
+                key={e.id}
+                icon={CalendarRange}
+                title={e.name}
+                subtitle={`${e.start || '—'} to ${e.end || '—'} · marks ${e.marksOpen ? 'open' : 'closed'}`}
+                right={<Badge label={e.status === 'published' ? 'Published' : e.locked ? 'Locked' : 'Draft'} tone={e.status === 'published' ? 'success' : e.locked ? 'info' : 'warn'} />}
+                last={i === exams.length - 1}
+              />
+            ))
+          }
+        </QueryView>
+      </Card>
+      <NoApiBanner what="Exam types, grading scale and pass rules (kept in this app)" />
       <Card title="Exam types and weightage" action={{ label: 'Add', onPress: guard(() => openType(null)) }}>
         {types.map((t, i) => (
           <ListRow
@@ -134,6 +176,11 @@ export function AdminExamSetup(_: ScreenProps) {
         <KV k="Subjects allowed below the minimum" v={String(rules.maxFailSubjects)} last />
       </Card>
 
+      <FormSheet visible={examOpen} onClose={() => setExamOpen(false)} title="Add exam" onSubmit={addExam}>
+        <Field label="Name" value={examForm.name} onChangeText={v => setExamForm(p => ({ ...p, name: v }))} placeholder="e.g. Final term 2026" />
+        <Field label="Start date" value={examForm.start} onChangeText={v => setExamForm(p => ({ ...p, start: v }))} placeholder="YYYY-MM-DD" />
+        <Field label="End date" value={examForm.end} onChangeText={v => setExamForm(p => ({ ...p, end: v }))} placeholder="YYYY-MM-DD" />
+      </FormSheet>
       <FormSheet visible={editType !== null} onClose={() => setEditType(null)} title={editType === -1 ? 'Add exam type' : 'Edit exam type'} onSubmit={saveType}>
         <Field label="Name" value={typeForm.name} onChangeText={v => setTypeForm(p => ({ ...p, name: v }))} />
         <Field label="Weightage %" value={typeForm.weight} keyboardType="number-pad" onChangeText={v => setTypeForm(p => ({ ...p, weight: v }))} />
@@ -171,18 +218,36 @@ export function AdminExamSetup(_: ScreenProps) {
 
 export function AdminDateSheet(_: ScreenProps) {
   const { guard } = useGuard();
-  const [papers, setPapers] = usePapers();
+  const [exams, , examsQ] = useExams();
+  const classes = useLiveClasses();
+  const academic = useApi('adm:academic', webA.academic);
+  const subjects = (academic.data?.subjects ?? []).map(x => x.name);
+  const [examSel, setExamSel] = useState('');
+  const exam = exams.find(e => e.name === examSel) ?? exams[exams.length - 1];
+  const [allPapers, setPapers, papersQ] = usePapers();
+  const papers = allPapers.filter(p => !exam || p.examId === exam.id);
   const [published, setPublished] = usePublished();
-  const [cls, setCls] = useState(RESULT_CLASSES[0]);
+  const days = examDays(exam?.start, exam?.end);
+  const [clsSel, setCls] = useState('');
+  const cls = clsSel || classes.names[0] || '';
   const [edit, setEdit] = useState<string | null>(null);
-  const [form, setForm] = useState({ cls: RESULT_CLASSES[0], subject: RESULT_SUBJECTS[0].name, date: DATES[0], time: TIMES[0] });
+  const [form, setForm] = useState({ cls: '', subject: '', date: '', time: TIMES[0] });
+  const pubKey = `${exam?.id ?? ''}|${cls}`;
 
   const open = (id: string | null) => {
     const p = papers.find(x => x.id === id);
-    setForm(p ? { cls: p.cls, subject: p.subject, date: p.date, time: p.time } : { cls, subject: RESULT_SUBJECTS[0].name, date: DATES[0], time: TIMES[0] });
+    setForm(p ? { cls: p.cls, subject: p.subject, date: p.date, time: p.time } : { cls, subject: subjects[0] ?? '', date: days[0], time: TIMES[0] });
     setEdit(id ?? 'new');
   };
   const save = () => {
+    if (!exam) {
+      toast('Add an exam in Exam setup first');
+      return;
+    }
+    if (!form.cls || !form.subject || !form.date) {
+      toast('Pick a class, subject and date');
+      return;
+    }
     const clash = papers.find(p => p.id !== edit && p.cls === form.cls && p.date === form.date && p.time === form.time);
     if (clash) {
       toast(`${form.cls} already has ${clash.subject} at that time`);
@@ -193,33 +258,42 @@ export function AdminDateSheet(_: ScreenProps) {
       toast(`${form.subject} is already on the ${form.cls} date sheet`);
       return;
     }
-    const id = edit === 'new' ? `${form.cls}-${form.subject}` : (edit as string);
-    setPapers(list => (edit === 'new' ? [...list, { id, ...form }] : list.map(p => (p.id === edit ? { id, ...form } : p))));
-    setPublished(m => ({ ...m, [form.cls]: false }));
-    logAudit('Date sheet', `${form.cls} ${form.subject}: ${form.date} ${form.time}`);
+    const paper = { id: edit === 'new' ? `new-${Date.now()}` : (edit as string), examId: exam.id, ...form };
+    setPapers(list => (edit === 'new' ? [...list, paper] : list.map(p => (p.id === edit ? paper : p))));
+    setPublished(m => ({ ...m, [`${exam.id}|${form.cls}`]: false }));
+    logAudit('Date sheet', `${exam.name} · ${form.cls} ${form.subject}: ${form.date} ${form.time}`);
     setEdit(null);
   };
 
   return (
     <ListScreen
       title="Date sheet"
-      subtitle="Final term 2026 · builder per class"
+      subtitle={`${exam?.name ?? 'No exam yet'} · builder per class`}
       items={papers}
       keyOf={p => p.id}
       searchText={p => `${p.cls} ${p.subject} ${p.date}`}
-      filters={[{ label: 'Class', options: ['All classes', ...RESULT_CLASSES], get: p => p.cls }]}
+      filters={[{ label: 'Class', options: ['All classes', ...classes.names], get: p => p.cls }]}
       onAdd={guard(() => open(null))}
       addLabel="Add paper"
+      empty="No papers on this date sheet yet"
       header={
         <>
           <ReadOnlyBanner />
+          <QueryView q={papersQ}>{() => null}</QueryView>
+          {exams.length ? (
+            <PickerField label="Exam" value={exam?.name ?? ''} options={exams.map(e => e.name)} onChange={setExamSel} />
+          ) : (
+            <QueryView q={examsQ} isEmpty={d => d.length === 0} emptyText="Add an exam in Exam setup first">
+              {() => null}
+            </QueryView>
+          )}
           <Card>
-            <PickerField label="Publish date sheet for" value={cls} options={RESULT_CLASSES} onChange={setCls} />
+            <PickerField label="Publish date sheet for" value={cls} options={classes.names} onChange={setCls} />
             <View style={[adminStyles.row, s.mt]}>
-              <Badge label={published[cls] ? 'Published' : 'Draft'} tone={published[cls] ? 'success' : 'warn'} />
+              <Badge label={published[pubKey] ? 'Published' : 'Draft'} tone={published[pubKey] ? 'success' : 'warn'} />
               <View style={s.flex} />
               <Button
-                label={published[cls] ? 'Re-publish' : 'Publish to portals'}
+                label={published[pubKey] ? 'Re-publish' : 'Publish to portals'}
                 icon={Send}
                 style={s.smallBtn}
                 onPress={guard(() => {
@@ -227,17 +301,18 @@ export function AdminDateSheet(_: ScreenProps) {
                     toast('Add papers first');
                     return;
                   }
-                  setPublished(m => ({ ...m, [cls]: true }));
+                  setPublished(m => ({ ...m, [pubKey]: true }));
                   logAudit('Date sheet', `${cls} date sheet published`);
-                  toast(`${cls} date sheet published to parent, student and teacher apps`);
+                  toast(`${cls} date sheet marked as published`);
                 })}
               />
             </View>
           </Card>
+          <NoApiBanner what="Publishing the date sheet to the parent and student apps" />
           <FormSheet visible={edit !== null} onClose={() => setEdit(null)} title={edit === 'new' ? 'Add paper' : 'Edit paper'} onSubmit={save}>
-            <PickerField label="Class" value={form.cls} options={RESULT_CLASSES} onChange={v => setForm(p => ({ ...p, cls: v }))} />
-            <PickerField label="Subject" value={form.subject} options={RESULT_SUBJECTS.map(x => x.name)} onChange={v => setForm(p => ({ ...p, subject: v }))} />
-            <PickerField label="Date" value={form.date} options={DATES} onChange={v => setForm(p => ({ ...p, date: v }))} />
+            <PickerField label="Class" value={form.cls} options={classes.names} onChange={v => setForm(p => ({ ...p, cls: v }))} />
+            <PickerField label="Subject" value={form.subject} options={subjects.length ? subjects : RESULT_SUBJECTS.map(x => x.name)} onChange={v => setForm(p => ({ ...p, subject: v }))} />
+            <PickerField label="Date" value={form.date} options={days} onChange={v => setForm(p => ({ ...p, date: v }))} />
             <PickerField label="Time" value={form.time} options={TIMES} onChange={v => setForm(p => ({ ...p, time: v }))} />
           </FormSheet>
         </>
@@ -246,7 +321,7 @@ export function AdminDateSheet(_: ScreenProps) {
         <ListRow
           icon={CalendarRange}
           title={`${p.date} · ${p.subject}`}
-          subtitle={`${p.cls} · ${p.time} · 100 marks`}
+          subtitle={`${p.cls} · ${p.time}`}
           onPress={guard(() => open(p.id))}
           chevron
           last={last}
@@ -261,31 +336,42 @@ export function AdminDateSheet(_: ScreenProps) {
 export function AdminInvigilation(_: ScreenProps) {
   const nav = useNav();
   const { guard } = useGuard();
-  const [duties, setDuties] = useDuties();
+  const [exams] = useExams();
+  const exam = exams[exams.length - 1];
+  const days = examDays(exam?.start, exam?.end).slice(0, 6);
+  const [saved, setDuties, q] = useDuties();
+  const staffQ = useApi('adm:staff:all', webA.staff);
+  const teachers = (staffQ.data ?? []).filter(x => x.status !== 'left').map(x => x.name);
+  // Every date and room has a slot; saved records fill in the invigilator.
+  const duties: Duty[] = days.flatMap(date =>
+    ROOMS.map(room => saved.find(d => d.date === date && d.room === room) ?? { id: `new-${date}-${room}`, date, room, teacher: '' }),
+  );
   const [edit, setEdit] = useState<string | null>(null);
   const [teacher, setTeacher] = useState('');
   const current = duties.find(d => d.id === edit);
   return (
     <ListScreen
       title="Invigilation & seating"
-      subtitle="Duty roster for the final term"
+      subtitle={`Duty roster · ${exam?.name ?? 'next exam'}`}
       items={duties}
       keyOf={d => d.id}
       searchText={d => `${d.date} ${d.room} ${d.teacher}`}
       filters={[
-        { label: 'Date', options: ['All dates', ...DATES.slice(0, 5)], get: d => d.date },
+        { label: 'Date', options: ['All dates', ...days], get: d => d.date },
         { label: 'Room', options: ['All rooms', ...ROOMS], get: d => d.room },
       ]}
       header={
         <>
           <ReadOnlyBanner />
+          <QueryView q={q}>{() => null}</QueryView>
           <Button label="Seating plans" icon={Armchair} variant="outline" onPress={() => nav.push('AdminSeating')} />
           <FormSheet
             visible={!!current}
             onClose={() => setEdit(null)}
             title={current ? `${current.date} · ${current.room}` : ''}
             onSubmit={() => {
-              if (!current) {
+              if (!current || !teacher) {
+                toast('Pick an invigilator');
                 return;
               }
               const busy = duties.find(d => d.id !== current.id && d.date === current.date && d.teacher === teacher);
@@ -293,23 +379,25 @@ export function AdminInvigilation(_: ScreenProps) {
                 toast(`${teacher} already has duty in ${busy.room} on ${busy.date}`);
                 return;
               }
-              setDuties(list => list.map(d => (d.id === current.id ? { ...d, teacher } : d)));
+              const next = { ...current, teacher };
+              setDuties(list => (list.some(d => d.id === current.id) ? list.map(d => (d.id === current.id ? next : d)) : [...list, next]));
               logAudit('Invigilation', `${current.date} ${current.room}: ${teacher}`);
               setEdit(null);
             }}
           >
-            <PickerField label="Invigilator" value={teacher} options={TEACHERS} onChange={setTeacher} />
+            <PickerField label="Invigilator" value={teacher} options={teachers.length ? teachers : TEACHERS} onChange={setTeacher} />
           </FormSheet>
         </>
       }
       renderItem={(d, last) => (
         <ListRow
-          avatar={d.teacher}
-          title={d.teacher}
-          subtitle={`${d.date} · ${d.room} · 8:30 – 11:00`}
+          avatar={d.teacher || undefined}
+          icon={d.teacher ? undefined : Armchair}
+          title={d.teacher || 'Not assigned'}
+          subtitle={`${d.date} · ${d.room} · ${TIMES[0]}`}
           right={<Pencil size={16} color={colors.textMuted} />}
           onPress={guard(() => {
-            setTeacher(d.teacher);
+            setTeacher(d.teacher || teachers[0] || '');
             setEdit(d.id);
           })}
           last={last}
@@ -320,43 +408,58 @@ export function AdminInvigilation(_: ScreenProps) {
 }
 
 export function AdminSeating(_: ScreenProps) {
+  const { list: students, q } = useLiveStudents();
+  const [exams] = useExams();
+  const exam = exams[exams.length - 1];
+  const days = examDays(exam?.start, exam?.end);
   const [room, setRoom] = useState(ROOMS[0]);
-  const [date, setDate] = useState(DATES[0]);
+  const [date, setDate] = useState('');
+  const day = date || days[0];
   // Two classes alternate seats so neighbours never sit the same paper.
+  const active = students.filter(x => x.status === 'Active');
+  const classNames = Array.from(new Set(active.map(x => x.className))).sort();
   const ri = ROOMS.indexOf(room);
-  const a = classMarks(RESULT_CLASSES[ri % 3], 'Final term');
-  const b = classMarks(RESULT_CLASSES[(ri + 1) % 3], 'Final term');
-  const seats = Array.from({ length: 30 }, (__, i) => {
-    const list = i % 2 === 0 ? a : b;
-    const st = list[Math.floor(i / 2) % list.length];
-    return { seat: i + 1, cls: i % 2 === 0 ? RESULT_CLASSES[ri % 3] : RESULT_CLASSES[(ri + 1) % 3], roll: (Math.floor(i / 2) % list.length) + 1, name: st?.name ?? '' };
+  const ca = classNames.length ? classNames[ri % classNames.length] : '';
+  const cb = classNames.length > 1 ? classNames[(ri + 1) % classNames.length] : '';
+  const a = active.filter(x => x.className === ca);
+  const b = active.filter(x => x.className === cb);
+  const seats = Array.from({ length: Math.min(30, a.length + b.length) }, (__, i) => {
+    const useA = b.length === 0 || (i % 2 === 0 && Math.floor(i / 2) < a.length) || Math.floor(i / 2) >= b.length;
+    const list = useA ? a : b;
+    const idx = Math.floor(i / 2) % Math.max(1, list.length);
+    const st = list[idx];
+    return { seat: i + 1, cls: useA ? ca : cb, roll: st?.roll || idx + 1, name: st?.name ?? '' };
   });
   return (
     <Screen
       title="Seating plan"
-      subtitle={`${room} · ${date}`}
+      subtitle={`${room} · ${day}`}
+      refreshing={q.refreshing}
+      onRefresh={q.refresh}
       footer={<Button label="Print seating plan" icon={Printer} onPress={() => toast(`Seating plan for ${room} sent to printer (demo)`)} />}
     >
+      <QueryView q={q}>{() => null}</QueryView>
       <View style={adminStyles.row}>
         <View style={s.flex}>
           <PickerField label="Room" value={room} options={ROOMS} onChange={setRoom} />
         </View>
         <View style={s.flex}>
-          <PickerField label="Date" value={date} options={DATES} onChange={setDate} />
+          <PickerField label="Date" value={day} options={days} onChange={setDate} />
         </View>
       </View>
       <InfoBanner text="Seats alternate between two classes so neighbours never sit the same paper." />
+      {seats.length === 0 ? <InfoBanner text="No active students to seat." /> : null}
       <View style={s.grid}>
         {seats.map(x => (
-          <View key={x.seat} style={[s.seat, x.cls === RESULT_CLASSES[ri % 3] ? s.seatA : s.seatB]}>
+          <View key={x.seat} style={[s.seat, x.cls === ca ? s.seatA : s.seatB]}>
             <Text style={s.seatNo}>{x.seat}</Text>
-            <Text style={s.seatCls}>{x.cls.replace('Class ', 'C')}·R{x.roll}</Text>
+            <Text style={s.seatCls} numberOfLines={1}>{x.cls.replace('Class ', 'C')}·R{x.roll}</Text>
           </View>
         ))}
       </View>
       <Card>
-        <ListRow icon={Plus} title={`${RESULT_CLASSES[ri % 3]}`} subtitle="Odd seats" right={<View style={[s.legend, s.seatA]} />} />
-        <ListRow icon={Plus} title={`${RESULT_CLASSES[(ri + 1) % 3]}`} subtitle="Even seats" right={<View style={[s.legend, s.seatB]} />} last />
+        <ListRow icon={Plus} title={ca || '—'} subtitle="Odd seats" right={<View style={[s.legend, s.seatA]} />} />
+        <ListRow icon={Plus} title={cb || '—'} subtitle="Even seats" right={<View style={[s.legend, s.seatB]} />} last />
       </Card>
     </Screen>
   );

@@ -1,6 +1,8 @@
 // Front Desk: inquiries CRM (S-03), registration, entry test and admission (M-02).
+// Live from /api/web/modules/inquiries, /registrations, /entry-tests and
+// /registrations/{id}/admit; what the server does not store stays in the app.
 import React, { useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
   BellRing,
   ChartColumn,
@@ -9,7 +11,6 @@ import {
   Printer,
   Receipt,
   ShieldCheck,
-  UserCheck,
   UserPlus,
 } from 'lucide-react-native';
 import {
@@ -37,18 +38,10 @@ import {
   PickerField,
   adminStyles,
 } from '../../../components/admin';
+import { NoApiBanner, QueryView } from '../../../components/states';
 import { colors, radius } from '../../../theme';
 import { ScreenProps, useNav, useParam } from '../../../navigation';
-import {
-  CLASSES,
-  SECTIONS,
-  campusName,
-  logAudit,
-  requestApproval,
-  useApprovals,
-  useRules,
-  useStaffRole,
-} from '../../../data/admin';
+import { SECTIONS, campusName, logAudit, useRules, useStaffRole } from '../../../data/admin';
 import {
   ADMISSION_FEE,
   Decision,
@@ -63,35 +56,49 @@ import {
   SOURCES,
   TEST_MAX,
   TEST_SUBJECTS,
-  campusIdByName,
-  campusOptions,
   findDuplicate,
   meritList,
-  nextGr,
-  nextRegNo,
   siblingsOf,
   testTotal,
   useInquiries,
+  useLiveClasses,
   useRegistrations,
   useTests,
 } from '../../../data/admin-frontdesk';
+import { invalidate, useApi } from '../../../api/hooks';
+import { errorMessage } from '../../../api/client';
+import { useApiSession } from '../../../api/session';
+import { webA } from '../../../api/webA';
 import { ReadOnlyBanner, isNum, statusTone, useGuard } from './util';
 
 const cnicOk = (v: string) => v.replace(/\D/g, '').length === 13;
+
+// The next four Saturdays as ISO dates for the test schedule picker.
+function nextSaturdays() {
+  const out: string[] = [];
+  const d = new Date();
+  d.setDate(d.getDate() + ((6 - d.getDay() + 7) % 7 || 7));
+  for (let i = 0; i < 4; i += 1) {
+    out.push(d.toISOString().slice(0, 10));
+    d.setDate(d.getDate() + 7);
+  }
+  return out;
+}
 
 // ---------- Inquiries (S-03) ----------
 
 export function AdminInquiries(_: ScreenProps) {
   const nav = useNav();
   const { guard } = useGuard();
-  const [items, setItems] = useInquiries();
+  const classes = useLiveClasses();
+  const [items, setItems, q] = useInquiries();
   const [adding, setAdding] = useState(false);
   const [sel, setSel] = useState<string | null>(null);
   const [form, setForm] = useState({
     child: '',
     parent: '',
     mobile: '',
-    cls: 'Class 1',
+    cls: '',
     source: 'Walk-in' as InquirySource,
     followUp: 'Tomorrow',
     assigned: FRONT_STAFF[0],
@@ -107,9 +114,9 @@ export function AdminInquiries(_: ScreenProps) {
       toast('Enter child name, parent name and a valid mobile number');
       return;
     }
-    const id = `inq${Date.now()}`;
-    setItems(list => [{ id, ...form, status: 'New', notes: '' }, ...list]);
-    logAudit('Inquiry', `New inquiry: ${form.child} (${form.source}, ${form.cls})`);
+    const cls = form.cls || classes.names[0] || '';
+    setItems(list => [{ id: `new-${Date.now()}`, ...form, cls, status: 'New', notes: '' }, ...list]);
+    logAudit('Inquiry', `New inquiry: ${form.child} (${form.source}, ${cls})`);
     toast(`Inquiry saved. Follow-up reminder set for ${form.followUp}.`);
     setAdding(false);
     setForm(f => ({ ...f, child: '', parent: '', mobile: '' }));
@@ -127,9 +134,11 @@ export function AdminInquiries(_: ScreenProps) {
       ]}
       onAdd={guard(() => setAdding(true))}
       addLabel="Log inquiry"
+      empty="No inquiries yet"
       header={
         <>
           <ReadOnlyBanner />
+          <QueryView q={q}>{() => null}</QueryView>
           <KpiGrid>
             <Kpi label="New" value={String(items.filter(i => i.status === 'New').length)} />
             <Kpi label="Follow-ups today" value={String(items.filter(i => i.followUp === 'Today' && i.status !== 'Lost' && i.status !== 'Registered').length)} tone="warn" />
@@ -141,7 +150,7 @@ export function AdminInquiries(_: ScreenProps) {
             <Field label="Child name" value={form.child} onChangeText={v => setForm(f => ({ ...f, child: v }))} />
             <Field label="Parent name" value={form.parent} onChangeText={v => setForm(f => ({ ...f, parent: v }))} />
             <Field label="Mobile" value={form.mobile} keyboardType="phone-pad" onChangeText={v => setForm(f => ({ ...f, mobile: v }))} />
-            <PickerField label="Class" value={form.cls} options={CLASSES} onChange={v => setForm(f => ({ ...f, cls: v }))} />
+            <PickerField label="Class" value={form.cls || classes.names[0] || ''} options={classes.names} onChange={v => setForm(f => ({ ...f, cls: v }))} />
             <Text style={adminStyles.section}>Source</Text>
             <Chips options={SOURCES} value={form.source} onChange={v => setForm(f => ({ ...f, source: v as InquirySource }))} />
             <PickerField label="Follow-up date" value={form.followUp} options={FOLLOW_UP_DATES} onChange={v => setForm(f => ({ ...f, followUp: v }))} />
@@ -152,7 +161,7 @@ export function AdminInquiries(_: ScreenProps) {
               <View style={s.gap}>
                 <Text style={s.sheetTitle}>{selected.child}</Text>
                 <Card>
-                  <KV k="Parent" v={selected.parent} />
+                  <KV k="Parent" v={selected.parent || '—'} />
                   <KV k="Mobile" v={selected.mobile} />
                   <KV k="Class" v={selected.cls} />
                   <KV k="Source" v={selected.source} last />
@@ -205,7 +214,7 @@ export function AdminInquiries(_: ScreenProps) {
         <ListRow
           icon={UserPlus}
           title={i.child}
-          subtitle={`${i.cls} · ${i.parent} · ${i.mobile}\n${i.source} · follow-up ${i.followUp} · ${i.assigned}`}
+          subtitle={`${i.cls} · ${i.parent || '—'} · ${i.mobile}\n${i.source} · follow-up ${i.followUp} · ${i.assigned}`}
           right={<Badge label={i.status} tone={statusTone(i.status)} />}
           onPress={() => setSel(i.id)}
           last={last}
@@ -220,27 +229,40 @@ export function AdminInquiries(_: ScreenProps) {
 export function AdminRegistration(_: ScreenProps) {
   const nav = useNav();
   const { guard } = useGuard();
-  const [regs] = useRegistrations();
+  const classes = useLiveClasses();
+  const { list: regs, q } = useRegistrations();
   return (
     <ListScreen
       title="Registration"
-      subtitle={`Registration fee ${formatRs(REG_FEE)}`}
+      subtitle={`Registration fee ${formatRs(regs[0]?.feeAmount ?? REG_FEE)}`}
       items={regs}
       keyOf={r => r.regNo}
       searchText={r => `${r.regNo} ${r.name} ${r.father} ${r.fatherCnic} ${r.bForm}`}
       filters={[
-        { label: 'Class', options: ['All classes', ...CLASSES], get: r => r.cls },
+        { label: 'Class', options: ['All classes', ...classes.names], get: r => r.cls },
         { label: 'Fee', options: ['All', 'Fee paid', 'Fee due'], get: r => (r.feePaid ? 'Fee paid' : 'Fee due') },
       ]}
       onAdd={guard(() => nav.push('AdminRegistrationForm'))}
       addLabel="New registration"
-      header={<ReadOnlyBanner />}
+      empty="No registrations yet"
+      header={
+        <>
+          <ReadOnlyBanner />
+          <QueryView q={q}>{() => null}</QueryView>
+        </>
+      }
       renderItem={(r, last) => (
         <ListRow
           icon={ClipboardCheck}
           title={`${r.name} · ${r.cls}`}
           subtitle={`${r.regNo} · Father ${r.father} · ${r.fatherCnic}`}
-          right={<Badge label={r.feePaid ? 'Fee paid' : 'Fee due'} tone={r.feePaid ? 'success' : 'danger'} />}
+          right={
+            r.status === 'admitted' ? (
+              <Badge label="Admitted" tone="success" />
+            ) : (
+              <Badge label={r.feePaid ? 'Fee paid' : 'Fee due'} tone={r.feePaid ? 'success' : 'danger'} />
+            )
+          }
           onPress={() => nav.push('AdminRegistrationSlip', { regNo: r.regNo })}
           last={last}
         />
@@ -252,9 +274,14 @@ export function AdminRegistration(_: ScreenProps) {
 export function AdminRegistrationForm(_: ScreenProps) {
   const nav = useNav();
   const { guard } = useGuard();
-  const [regs, setRegs] = useRegistrations();
-  const [, setInquiries] = useInquiries();
+  const classes = useLiveClasses();
+  const [session] = useApiSession();
+  const campuses = session?.campuses ?? [];
+  const { list: regs, patchLocal } = useRegistrations();
+  const [inquiries, setInquiries] = useInquiries();
   const fromInquiry = useParam<string>('fromInquiry', '');
+  const current = campuses.find(c => String(c.id) === String(session?.campusId)) ?? campuses[0];
+  const [busy, setBusy] = useState(false);
   const [f, setF] = useState({
     name: useParam('name', ''),
     gender: 'M' as 'M' | 'F',
@@ -264,17 +291,22 @@ export function AdminRegistrationForm(_: ScreenProps) {
     fatherCnic: '',
     mobile: useParam('mobile', ''),
     prevSchool: '',
-    cls: useParam('cls', 'Class 1'),
-    campus: campusOptions[0],
+    cls: useParam('cls', ''),
+    campus: current?.name ?? '',
     feePaid: true,
     mode: 'Cash',
   });
   const set = (k: keyof typeof f) => (v: string | boolean) => setF(p => ({ ...p, [k]: v }));
   const dup = findDuplicate(regs, f.name, f.bForm, f.fatherCnic);
+  const cls = f.cls || classes.names[0] || '';
 
-  const save = () => {
+  const save = async () => {
     if (!f.name.trim() || !f.father.trim() || !f.dob.trim() || !f.prevSchool.trim()) {
       toast('Fill in student name, date of birth, father name and previous school');
+      return;
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(f.dob.trim())) {
+      toast('Enter the date of birth as YYYY-MM-DD');
       return;
     }
     if (!cnicOk(f.bForm) || !cnicOk(f.fatherCnic)) {
@@ -289,42 +321,54 @@ export function AdminRegistrationForm(_: ScreenProps) {
       toast(dup.error);
       return;
     }
-    const regNo = nextRegNo();
-    const reg: Registration = {
-      regNo,
-      name: f.name.trim(),
-      gender: f.gender,
-      dob: f.dob.trim(),
-      bForm: f.bForm,
-      father: f.father.trim(),
-      fatherCnic: f.fatherCnic,
-      mobile: f.mobile,
-      prevSchool: f.prevSchool.trim(),
-      cls: f.cls,
-      campus: campusIdByName(f.campus),
-      feePaid: f.feePaid,
-      decision: 'Pending',
-    };
-    setRegs(list => [reg, ...list]);
-    if (fromInquiry) {
-      setInquiries(list => list.map(i => (i.id === fromInquiry ? { ...i, status: 'Registered' } : i)));
+    const classId = classes.idOf(cls);
+    if (!classId) {
+      toast('Pick a class');
+      return;
     }
-    logAudit('Registration', `${regNo}: ${reg.name}, ${reg.cls}${f.feePaid ? `, fee ${formatRs(REG_FEE)} by ${f.mode}` : ', fee due'}`);
-    toast(`Registered as ${regNo}`);
-    nav.replace('AdminRegistrationSlip', { regNo });
+    const campusId = campuses.find(c => c.name === f.campus)?.id;
+    setBusy(true);
+    try {
+      const reg = await webA.register({
+        name: f.name.trim(),
+        gender: f.gender,
+        dob: f.dob.trim(),
+        bform: f.bForm,
+        fatherName: f.father.trim(),
+        fatherCnic: f.fatherCnic,
+        mobile: f.mobile,
+        prevSchool: f.prevSchool.trim(),
+        classId: Number(classId),
+        campusId: campusId ? Number(campusId) : undefined,
+        mode: f.feePaid ? f.mode.toLowerCase() : 'unpaid',
+      });
+      patchLocal(reg.regNo, { prevSchool: f.prevSchool.trim(), campus: campusId ? String(campusId) : '' });
+      const inq = fromInquiry ? inquiries.find(i => i.id === fromInquiry) : undefined;
+      if (inq) {
+        setInquiries(list => list.map(i => (i.id === fromInquiry ? { ...i, status: 'Registered' } : i)));
+      }
+      logAudit('Registration', `${reg.regNo}: ${reg.name}, ${cls}${f.feePaid ? `, fee by ${f.mode}` : ', fee due'}`);
+      invalidate('adm:registrations');
+      toast(`Registered as ${reg.regNo}`);
+      nav.replace('AdminRegistrationSlip', { regNo: reg.regNo });
+    } catch (e) {
+      toast(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
     <Screen
       title="Registration form"
       subtitle={fromInquiry ? 'Converted from inquiry · details filled in' : 'Front desk or public online form'}
-      footer={<Button label="Save and print slip" icon={Printer} onPress={guard(save)} />}
+      footer={<Button label={busy ? 'Saving…' : 'Save and print slip'} icon={Printer} onPress={guard(() => (busy ? undefined : save()))} />}
     >
       <ReadOnlyBanner />
       <Text style={adminStyles.section}>Student</Text>
       <Field label="Student name" value={f.name} onChangeText={set('name')} />
       <Chips options={['M', 'F']} value={f.gender} onChange={set('gender')} />
-      <Field label="Date of birth" value={f.dob} onChangeText={set('dob')} placeholder="e.g. 14 Mar 2018" />
+      <Field label="Date of birth" value={f.dob} onChangeText={set('dob')} placeholder="YYYY-MM-DD, e.g. 2018-03-14" />
       <Field label="B-Form number" value={f.bForm} onChangeText={set('bForm')} keyboardType="numbers-and-punctuation" placeholder="35202-1234567-1" />
       <Text style={adminStyles.section}>Guardian</Text>
       <Field label="Father name" value={f.father} onChangeText={set('father')} />
@@ -332,8 +376,10 @@ export function AdminRegistrationForm(_: ScreenProps) {
       <Field label="Mobile" value={f.mobile} onChangeText={set('mobile')} keyboardType="phone-pad" />
       <Text style={adminStyles.section}>School</Text>
       <Field label="Previous school" value={f.prevSchool} onChangeText={set('prevSchool')} />
-      <PickerField label="Class applied for" value={f.cls} options={CLASSES} onChange={set('cls')} />
-      <PickerField label="Campus" value={f.campus} options={campusOptions} onChange={set('campus')} />
+      <PickerField label="Class applied for" value={cls} options={classes.names} onChange={set('cls')} />
+      {campuses.length ? (
+        <PickerField label="Campus" value={f.campus} options={campuses.map(c => c.name)} onChange={set('campus')} />
+      ) : null}
       {dup.error ? <InfoBanner tone="danger" text={dup.error} /> : null}
       {!dup.error && dup.siblings.length ? (
         <InfoBanner
@@ -344,7 +390,7 @@ export function AdminRegistrationForm(_: ScreenProps) {
       <Card>
         <View style={adminStyles.row}>
           <View style={s.flex}>
-            <Text style={adminStyles.bold}>Registration fee {formatRs(REG_FEE)}</Text>
+            <Text style={adminStyles.bold}>Registration fee (school setting)</Text>
             <Text style={adminStyles.small}>{f.feePaid ? `Collected by ${f.mode}` : 'Not collected yet'}</Text>
           </View>
           <Toggle value={f.feePaid} onChange={set('feePaid')} />
@@ -356,29 +402,38 @@ export function AdminRegistrationForm(_: ScreenProps) {
 }
 
 export function AdminRegistrationSlip(_: ScreenProps) {
-  const [regs, setRegs] = useRegistrations();
-  const [tests] = useTests();
+  const { list: regs, q, patchLocal } = useRegistrations();
+  const { list: tests } = useTests();
+  const [session] = useApiSession();
   const { guard } = useGuard();
   const regNo = useParam('regNo', regs[0]?.regNo ?? '');
   const r = regs.find(x => x.regNo === regNo) ?? regs[0];
   if (!r) {
-    return <Screen title="Registration slip" />;
+    return (
+      <Screen title="Registration slip">
+        <QueryView q={q} isEmpty={d => d.length === 0} emptyText="No registrations yet">
+          {() => null}
+        </QueryView>
+      </Screen>
+    );
   }
-  const test = tests.find(t => t.cls === r.cls);
+  const test = tests.find(t => t.classId === r.classId || t.cls === r.cls);
   return (
     <Screen
       title="Registration slip"
       subtitle={r.regNo}
+      refreshing={q.refreshing}
+      onRefresh={q.refresh}
       footer={
         <>
           {r.feePaid ? null : (
             <Button
-              label={`Collect fee ${formatRs(REG_FEE)}`}
+              label={`Collect fee ${formatRs(r.feeAmount)}`}
               icon={Receipt}
               onPress={guard(() => {
-                setRegs(list => list.map(x => (x.regNo === r.regNo ? { ...x, feePaid: true } : x)));
-                logAudit('Registration fee', `${r.regNo}: ${formatRs(REG_FEE)} collected`);
-                toast('Fee collected. Receipt printed (demo).');
+                patchLocal(r.regNo, { feePaid: true });
+                logAudit('Registration fee', `${r.regNo}: ${formatRs(r.feeAmount)} collected`);
+                toast('Fee marked as collected in this app.');
               })}
             />
           )}
@@ -386,23 +441,24 @@ export function AdminRegistrationSlip(_: ScreenProps) {
         </>
       }
     >
+      {r.feePaid ? null : <NoApiBanner what="Collecting a registration fee after the form is saved" />}
       <Card>
         <View style={s.slipHead}>
           <View style={s.flex}>
             <Text style={s.slipNo}>{r.regNo}</Text>
-            <Text style={adminStyles.small}>Bright Future School · {campusName(r.campus)}</Text>
+            <Text style={adminStyles.small}>{session?.user.schoolName ?? 'School'} · {r.campus ? campusName(r.campus) : '—'}</Text>
           </View>
           <QRCode value={r.regNo} size={72} />
         </View>
         <KV k="Student" v={`${r.name} (${r.gender})`} />
-        <KV k="Date of birth" v={r.dob} />
-        <KV k="B-Form" v={r.bForm} />
+        <KV k="Date of birth" v={r.dob || '—'} />
+        <KV k="B-Form" v={r.bForm || '—'} />
         <KV k="Father" v={`${r.father} · ${r.fatherCnic}`} />
         <KV k="Mobile" v={r.mobile} />
-        <KV k="Previous school" v={r.prevSchool} />
+        <KV k="Previous school" v={r.prevSchool || '—'} />
         <KV k="Class applied" v={r.cls} />
         <KV k="Registration fee" v={<Badge label={r.feePaid ? 'Paid' : 'Due'} tone={r.feePaid ? 'success' : 'danger'} />} />
-        <KV k="Entry test" v={test ? `${test.date} · ${test.time} · ${test.room}` : 'Date to be announced'} last />
+        <KV k="Entry test" v={test ? `${test.date}${test.time ? ` · ${test.time}` : ''}${test.room ? ` · ${test.room}` : ''}` : 'Date to be announced'} last />
       </Card>
       <InfoBanner text="Bring this slip and the child's B-Form to the entry test." />
     </Screen>
@@ -413,84 +469,153 @@ export function AdminRegistrationSlip(_: ScreenProps) {
 
 export function AdminEntryTest(_: ScreenProps) {
   const { guard } = useGuard();
+  const classes = useLiveClasses();
   const [tab, setTab] = useState('Schedule');
-  const [tests, setTests] = useTests();
-  const [regs, setRegs] = useRegistrations();
-  const classes = Array.from(new Set(tests.map(t => t.cls)));
-  const [cls, setCls] = useState(classes[0] ?? 'Class 3');
+  const { list: tests, q: testsQ, setPublished } = useTests();
+  const { list: regs, q: regsQ, patchLocal } = useRegistrations();
+  const testClasses = Array.from(new Set(tests.map(t => t.cls)));
+  const [clsSel, setCls] = useState('');
+  const cls = clsSel || testClasses[0] || '';
   const [adding, setAdding] = useState(false);
-  const [nt, setNt] = useState({ cls: 'Class 2', date: 'Sat 31 Oct', time: '9:00 AM', room: 'Hall A' });
+  const saturdays = nextSaturdays();
+  const [nt, setNt] = useState({ cls: '', date: saturdays[0], time: '9:00 AM', room: 'Hall A' });
   const [draft, setDraft] = useState<Record<string, Record<string, string>>>({});
   const [remarks, setRemarks] = useState<Record<string, string>>({});
   const [decideFor, setDecideFor] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  const candidates = regs.filter(r => r.cls === cls && r.feePaid);
-  const merit = meritList(candidates);
   const test = tests.find(t => t.cls === cls);
+  const subjects = test?.subjects ?? TEST_SUBJECTS.map(name => ({ name, max: TEST_MAX }));
+  const maxTotal = subjects.reduce((n, x) => n + x.max, 0);
+  const meritQ = useApi(test ? `adm:merit:${test.id}` : null, () => webA.merit(test?.id ?? ''));
+  const serverMarks = new Map((meritQ.data?.merit ?? []).map(m => [String(m.id), m.marks]));
+  const candidates = regs
+    .filter(r => (test?.classId ? r.classId === test.classId : r.cls === cls) && r.feePaid && r.status !== 'admitted')
+    .map(r => ({ ...r, marks: serverMarks.get(r.id) && Object.keys(serverMarks.get(r.id) ?? {}).length ? serverMarks.get(r.id) : r.marks }));
+  const merit = meritList(candidates);
 
-  const saveMarks = () => {
+  const saveMarks = async () => {
+    if (!test) {
+      toast('Schedule a test for this class first');
+      return;
+    }
     let bad = false;
-    const next = regs.map(r => {
-      if (r.cls !== cls || !r.feePaid) {
-        return r;
-      }
+    const payload: Record<string, Record<string, number>> = {};
+    candidates.forEach(r => {
       const d = draft[r.regNo];
       const marks: Record<string, number> = { ...(r.marks ?? {}) };
       if (d) {
-        for (const sub of TEST_SUBJECTS) {
-          const v = d[sub];
+        for (const sub of subjects) {
+          const v = d[sub.name];
           if (v === undefined || v === '') {
             continue;
           }
-          if (!isNum(v) || Number(v) > TEST_MAX) {
+          if (!isNum(v) || Number(v) > sub.max) {
             bad = true;
           } else {
-            marks[sub] = Number(v);
+            marks[sub.name] = Number(v);
           }
         }
       }
-      const done = TEST_SUBJECTS.every(sub => marks[sub] !== undefined);
-      return {
-        ...r,
-        testId: test?.id ?? r.testId,
-        marks: done ? marks : r.marks,
-        interview: remarks[r.regNo] ?? r.interview,
-      };
+      if (subjects.every(sub => marks[sub.name] !== undefined) && d) {
+        payload[r.id] = marks;
+      }
+      if (remarks[r.regNo] !== undefined) {
+        patchLocal(r.regNo, { interview: remarks[r.regNo], testId: test.id });
+      }
     });
     if (bad) {
-      toast(`Marks must be numbers from 0 to ${TEST_MAX}`);
+      toast(`Marks must be numbers from 0 to ${subjects[0]?.max ?? TEST_MAX}`);
       return;
     }
-    setRegs(next);
+    if (Object.keys(payload).length) {
+      setBusy(true);
+      try {
+        const res = await webA.saveEntryMarks(test.id, payload);
+        meritQ.setData(() => res);
+      } catch (e) {
+        toast(errorMessage(e));
+        setBusy(false);
+        return;
+      }
+      setBusy(false);
+    }
+    setDraft({});
     logAudit('Entry test', `Marks saved for ${cls}`);
     toast('Marks and interview remarks saved');
   };
 
-  const decide = (regNo: string, d: Decision) => {
-    setRegs(list => list.map(r => (r.regNo === regNo ? { ...r, decision: d } : r)));
-    logAudit('Entry test', `${regNo}: ${d}`);
+  const decide = async (id: string, regNo: string, d: Decision) => {
     setDecideFor(null);
+    try {
+      await webA.decide(id, d.toLowerCase() as 'selected' | 'waiting' | 'rejected');
+      logAudit('Entry test', `${regNo}: ${d}`);
+      if (d === 'Selected') {
+        invalidate('adm:approvals');
+        toast('Selected. Sent to the Principal for admission approval.');
+      }
+      regsQ.refresh();
+    } catch (e) {
+      toast(errorMessage(e));
+    }
+  };
+
+  const schedule = async () => {
+    const name = nt.cls || classes.names[0] || '';
+    const classId = classes.idOf(name);
+    if (!classId) {
+      toast('Pick a class');
+      return;
+    }
+    if (tests.some(t => t.cls === name)) {
+      toast(`${name} already has a test scheduled`);
+      return;
+    }
+    try {
+      await webA.addEntryTest({
+        name: `${name} entry test`,
+        testDate: nt.date,
+        testTime: nt.time,
+        room: nt.room,
+        classIds: [Number(classId)],
+        regIds: regs.filter(r => r.classId === String(classId) && r.status !== 'admitted').map(r => Number(r.id)),
+        subjects: TEST_SUBJECTS.map(x => ({ name: x, max: TEST_MAX })),
+      });
+      logAudit('Entry test', `Scheduled ${name} on ${nt.date} ${nt.time}`);
+      setAdding(false);
+      toast('Test scheduled');
+      testsQ.refresh();
+    } catch (e) {
+      toast(errorMessage(e));
+    }
   };
 
   return (
-    <Screen title="Entry test" subtitle="Schedule, admit slips, marks, merit list, interview">
+    <Screen
+      title="Entry test"
+      subtitle="Schedule, admit slips, marks, merit list, interview"
+      refreshing={testsQ.refreshing}
+      onRefresh={() => Promise.all([testsQ.refresh(), regsQ.refresh(), meritQ.refresh()]).then(() => undefined)}
+    >
       <ReadOnlyBanner />
+      <QueryView q={testsQ}>{() => null}</QueryView>
       <Segmented options={['Schedule', 'Marks', 'Merit list']} value={tab} onChange={setTab} />
-      {tab !== 'Schedule' ? (
-        <PickerField label="Class" value={cls} options={classes} onChange={setCls} />
+      {tab !== 'Schedule' && testClasses.length ? (
+        <PickerField label="Class" value={cls} options={testClasses} onChange={setCls} />
       ) : null}
 
       {tab === 'Schedule' ? (
         <>
           <Card title="Scheduled tests">
+            {tests.length === 0 ? <Text style={adminStyles.small}>No entry tests scheduled yet.</Text> : null}
             {tests.map((t, i) => {
-              const n = regs.filter(r => r.cls === t.cls && r.feePaid).length;
+              const n = regs.filter(r => (t.classId ? r.classId === t.classId : r.cls === t.cls) && r.feePaid && r.status !== 'admitted').length;
               return (
                 <ListRow
                   key={t.id}
                   icon={ClipboardCheck}
                   title={`${t.cls} · ${t.date}`}
-                  subtitle={`${t.time} · ${t.room} · ${n} candidates`}
+                  subtitle={`${t.time || '—'} · ${t.room || '—'} · ${n} candidates`}
                   right={
                     <Button
                       label="Admit slips"
@@ -505,23 +630,9 @@ export function AdminEntryTest(_: ScreenProps) {
             })}
           </Card>
           <Button label="Schedule a test" onPress={guard(() => setAdding(true))} />
-          <FormSheet
-            visible={adding}
-            onClose={() => setAdding(false)}
-            title="Schedule entry test"
-            onSubmit={() => {
-              if (tests.some(t => t.cls === nt.cls)) {
-                toast(`${nt.cls} already has a test scheduled`);
-                return;
-              }
-              setTests(list => [...list, { id: `t${Date.now()}`, ...nt, published: false }]);
-              logAudit('Entry test', `Scheduled ${nt.cls} on ${nt.date} ${nt.time}`);
-              setAdding(false);
-              toast('Test scheduled');
-            }}
-          >
-            <PickerField label="Class" value={nt.cls} options={CLASSES} onChange={v => setNt(p => ({ ...p, cls: v }))} />
-            <PickerField label="Date" value={nt.date} options={['Sat 24 Oct', 'Sat 31 Oct', 'Sat 7 Nov', 'Sat 14 Nov']} onChange={v => setNt(p => ({ ...p, date: v }))} />
+          <FormSheet visible={adding} onClose={() => setAdding(false)} title="Schedule entry test" onSubmit={schedule}>
+            <PickerField label="Class" value={nt.cls || classes.names[0] || ''} options={classes.names} onChange={v => setNt(p => ({ ...p, cls: v }))} />
+            <PickerField label="Date" value={nt.date} options={saturdays} onChange={v => setNt(p => ({ ...p, date: v }))} />
             <PickerField label="Time" value={nt.time} options={['9:00 AM', '11:00 AM', '1:00 PM']} onChange={v => setNt(p => ({ ...p, time: v }))} />
             <PickerField label="Room" value={nt.room} options={['Hall A', 'Room 4', 'Library']} onChange={v => setNt(p => ({ ...p, room: v }))} />
           </FormSheet>
@@ -530,21 +641,22 @@ export function AdminEntryTest(_: ScreenProps) {
 
       {tab === 'Marks' ? (
         <>
-          <InfoBanner text={`Each subject is out of ${TEST_MAX}. Only candidates with paid registration fee appear.`} />
+          <InfoBanner text={`Each subject is out of ${subjects.map(x => x.max).join(' / ')}. Only candidates with paid registration fee appear.`} />
+          <NoApiBanner what="Interview remarks (kept in this app)" />
           {candidates.map(r => (
             <Card key={r.regNo}>
               <Text style={adminStyles.bold}>{r.name}</Text>
               <Text style={adminStyles.small}>{r.regNo}</Text>
               <View style={s.marksRow}>
-                {TEST_SUBJECTS.map(sub => {
-                  const v = draft[r.regNo]?.[sub] ?? (r.marks?.[sub] !== undefined ? String(r.marks[sub]) : '');
-                  const bad = v !== '' && (!isNum(v) || Number(v) > TEST_MAX);
+                {subjects.map(sub => {
+                  const v = draft[r.regNo]?.[sub.name] ?? (r.marks?.[sub.name] !== undefined ? String(r.marks[sub.name]) : '');
+                  const bad = v !== '' && (!isNum(v) || Number(v) > sub.max);
                   return (
-                    <View key={sub} style={s.flex}>
-                      <Text style={s.markLabel}>{sub}</Text>
+                    <View key={sub.name} style={s.flex}>
+                      <Text style={s.markLabel}>{sub.name}</Text>
                       <TextInput
                         value={v}
-                        onChangeText={x => setDraft(p => ({ ...p, [r.regNo]: { ...(p[r.regNo] ?? {}), [sub]: x } }))}
+                        onChangeText={x => setDraft(p => ({ ...p, [r.regNo]: { ...(p[r.regNo] ?? {}), [sub.name]: x } }))}
                         keyboardType="number-pad"
                         maxLength={3}
                         style={[s.markInput, bad && s.markBad]}
@@ -561,36 +673,41 @@ export function AdminEntryTest(_: ScreenProps) {
               />
             </Card>
           ))}
-          {candidates.length ? <Button label="Save marks" onPress={guard(saveMarks)} /> : <InfoBanner text="No candidates for this class yet." />}
+          {candidates.length ? (
+            <Button label={busy ? 'Saving…' : 'Save marks'} onPress={guard(() => (busy ? undefined : saveMarks()))} />
+          ) : (
+            <InfoBanner text={test ? 'No candidates for this class yet.' : 'Schedule a test to enter marks.'} />
+          )}
         </>
       ) : null}
 
       {tab === 'Merit list' ? (
         <>
-          <Card title={`Merit list · ${cls}`}>
+          <Card title={`Merit list · ${cls || '—'}`}>
             {merit.length === 0 ? <Text style={adminStyles.small}>No marks entered yet.</Text> : null}
             {merit.map((m, i) => (
               <ListRow
                 key={m.reg.regNo}
                 title={`${m.rank}. ${m.reg.name}`}
-                subtitle={`${m.total} / ${TEST_MAX * TEST_SUBJECTS.length} · ${Math.round((m.total / (TEST_MAX * TEST_SUBJECTS.length)) * 100)}%${m.reg.interview ? ` · ${m.reg.interview}` : ''}`}
+                subtitle={`${m.total} / ${maxTotal} · ${Math.round((m.total / Math.max(1, maxTotal)) * 100)}%${m.reg.interview ? ` · ${m.reg.interview}` : ''}`}
                 right={<Badge label={m.reg.decision} tone={statusTone(m.reg.decision)} />}
                 onPress={() => setDecideFor(m.reg.regNo)}
                 last={i === merit.length - 1}
               />
             ))}
           </Card>
+          <NoApiBanner what="Publishing results and parent SMS" />
           <Button
             label={test?.published ? 'Results published · resend SMS' : 'Publish results and send SMS / WhatsApp'}
             onPress={guard(() => {
               const decided = merit.filter(m => m.reg.decision !== 'Pending');
-              if (!decided.length) {
+              if (!decided.length || !test) {
                 toast('Mark at least one candidate selected, waiting or rejected');
                 return;
               }
-              setTests(list => list.map(t => (t.cls === cls ? { ...t, published: true } : t)));
+              setPublished(p => ({ ...p, [test.id]: true }));
               logAudit('Entry test', `Results published for ${cls}`);
-              toast(`Published on the public result page. SMS/WhatsApp sent to ${decided.length} parents (demo).`);
+              toast(`Results marked as published. SMS/WhatsApp to ${decided.length} parents (demo).`);
             })}
           />
           <BottomSheet visible={!!decideFor} onClose={() => setDecideFor(null)}>
@@ -598,7 +715,12 @@ export function AdminEntryTest(_: ScreenProps) {
             <Chips
               options={['Selected', 'Waiting', 'Rejected']}
               value={regs.find(r => r.regNo === decideFor)?.decision ?? 'Pending'}
-              onChange={guard((v: string) => decideFor && decide(decideFor, v as Decision))}
+              onChange={guard((v: string) => {
+                const r = regs.find(x => x.regNo === decideFor);
+                if (r) {
+                  decide(r.id, r.regNo, v as Decision);
+                }
+              })}
             />
           </BottomSheet>
         </>
@@ -608,193 +730,174 @@ export function AdminEntryTest(_: ScreenProps) {
 }
 
 // ---------- Admission ----------
+// Selecting a candidate creates a pending Principal approval on the server;
+// /registrations/{id}/admit then creates the student, GR No. and portal logins.
 
 export function AdminAdmission(_: ScreenProps) {
   const { guard } = useGuard();
-  const [regs, setRegs] = useRegistrations();
-  const [approvals, setApprovals] = useApprovals();
+  const { list: regs, q, patchLocal } = useRegistrations();
+  const approvalsQ = useApi('adm:approvals', webA.approvals);
   const [rules] = useRules();
   const [role] = useStaffRole();
-  const canApprove = role === 'owner' || role === 'principal';
+  const [session] = useApiSession();
+  const userRole = session?.user.role ?? role;
+  const canApprove = userRole === 'owner' || userRole === 'principal';
   const [tab, setTab] = useState('In progress');
+  const [busy, setBusy] = useState<string | null>(null);
   const selected = regs.filter(r => r.decision === 'Selected');
   const list = selected.filter(r => (tab === 'Final' ? r.admission?.final : !r.admission?.final));
+  const pendingOf = (r: Registration) =>
+    (approvalsQ.data ?? []).find(a => a.entityType === 'registrations' && String(a.entityId) === r.id);
 
-  const patch = (regNo: string, fn: (r: Registration) => Registration, detail: string) => {
-    setRegs(all => all.map(r => (r.regNo === regNo ? fn(r) : r)));
-    logAudit('Admission', detail);
-  };
-  const approvalOf = (r: Registration) => approvals.find(a => a.id === r.admission?.approvalId);
-
-  const finalize = (r: Registration): Registration => {
-    const a = r.admission;
-    if (!a) {
-      return r;
+  const approve = async (r: Registration) => {
+    const ap = pendingOf(r);
+    if (!ap) {
+      toast('No pending approval found. Refresh and try again.');
+      return;
     }
-    const ok =
-      approvals.find(x => x.id === a.approvalId)?.status === 'Approved' &&
-      !!a.gr &&
-      !!a.logins &&
-      (a.feePaid || !rules.admissionNeedsFee);
-    return { ...r, admission: { ...a, final: ok } };
+    try {
+      await webA.decideApproval(ap.id, 'approved');
+      logAudit('Approval', `Admission approved: ${r.name}`);
+      invalidate('adm:approvals');
+      q.refresh();
+    } catch (e) {
+      toast(errorMessage(e));
+    }
+  };
+
+  const admit = async (r: Registration) => {
+    const a = r.admission ?? { section: 'A', feePaid: false, final: false };
+    setBusy(r.id);
+    try {
+      const res = await webA.admit(r.id, a.section || 'A');
+      patchLocal(r.regNo, {
+        admission: {
+          ...a,
+          gr: res.grNo,
+          final: true,
+          logins: { parent: r.mobile, student: res.grNo, parentPassword: res.parentPassword, studentPassword: res.studentPassword },
+        },
+      });
+      logAudit('Admission', `Admission final: ${r.name} ${res.grNo}`);
+      invalidate('adm:students');
+      q.refresh();
+      const sibs = siblingsOf(r.fatherCnic);
+      Alert.alert(
+        `Admitted · ${res.grNo}`,
+        [
+          res.parentPassword
+            ? `Parent login: ${r.mobile} · temporary password ${res.parentPassword}`
+            : `Parent login: ${r.mobile} (existing${sibs.length ? `, linked to ${sibs.length} sibling${sibs.length > 1 ? 's' : ''}` : ''})`,
+          `Student login: ${res.grNo} · temporary password ${res.studentPassword ?? '—'}`,
+          'Both must change the password at first sign in.',
+        ].join('\n'),
+      );
+    } catch (e) {
+      toast(errorMessage(e));
+    } finally {
+      setBusy(null);
+    }
   };
 
   return (
-    <Screen title="Admission" subtitle="Approval, section, GR No., fee voucher, portal logins">
+    <Screen
+      title="Admission"
+      subtitle="Approval, section, admission fee, GR No. and portal logins"
+      refreshing={q.refreshing}
+      onRefresh={() => Promise.all([q.refresh(), approvalsQ.refresh()]).then(() => undefined)}
+    >
       <ReadOnlyBanner />
+      <QueryView q={q}>{() => null}</QueryView>
       <Segmented options={['In progress', 'Final']} value={tab} onChange={setTab} />
       {rules.admissionNeedsFee ? (
         <InfoBanner text={`Admission becomes final only after the admission fee (${formatRs(ADMISSION_FEE)}) is paid.`} />
       ) : null}
       {list.length === 0 ? <InfoBanner text={tab === 'Final' ? 'No final admissions yet.' : 'No selected candidates waiting. Select candidates in Entry test.'} /> : null}
       {list.map(r => {
-        const a = r.admission;
-        const ap = approvalOf(r);
-        const approved = ap?.status === 'Approved';
-        const sibs = siblingsOf(r.fatherCnic);
+        const a = r.admission ?? { section: 'A', feePaid: false, final: false };
+        const approved = r.principal === 'approved';
+        const pending = pendingOf(r);
         return (
           <Card key={r.regNo}>
             <View style={adminStyles.row}>
               <View style={s.flex}>
                 <Text style={adminStyles.bold}>{r.name}</Text>
-                <Text style={adminStyles.small}>{r.regNo} · {r.cls} · test {testTotal(r)}/{TEST_MAX * TEST_SUBJECTS.length}</Text>
+                <Text style={adminStyles.small}>{r.regNo} · {r.cls}{r.marks ? ` · test ${testTotal(r)}` : ''}</Text>
               </View>
-              <Badge label={a?.final ? 'Final' : approved ? 'Approved' : a ? 'Waiting approval' : 'Selected'} tone={a?.final ? 'success' : approved ? 'info' : 'warn'} />
+              <Badge label={a.final ? 'Final' : approved ? 'Approved' : 'Waiting approval'} tone={a.final ? 'success' : approved ? 'info' : 'warn'} />
             </View>
 
-            <Step n={1} title="Principal approval" done={approved}>
-              {!a ? (
-                <Button
-                  label="Send for approval"
-                  icon={ShieldCheck}
-                  variant="outline"
-                  style={s.smallBtn}
-                  onPress={guard(() => {
-                    const id = requestApproval({ type: 'Admission', title: `Admission: ${r.name}, ${r.cls}`, sub: `${r.regNo} · test ${testTotal(r)}`, by: 'Front Desk' });
-                    patch(r.regNo, x => ({ ...x, admission: { approvalId: id, section: 'A', feePaid: false, final: false } }), `${r.regNo} sent for approval`);
-                  })}
-                />
-              ) : !approved && canApprove ? (
-                <Button
-                  label="Approve now"
-                  icon={ShieldCheck}
-                  variant="outline"
-                  style={s.smallBtn}
-                  onPress={guard(() => {
-                    setApprovals(all => all.map(x => (x.id === a.approvalId ? { ...x, status: 'Approved' } : x)));
-                    logAudit('Approval', `Admission approved: ${r.name}`);
-                  })}
-                />
-              ) : (
-                <Text style={adminStyles.small}>{ap ? ap.status : 'Not sent'}</Text>
-              )}
-            </Step>
+            {a.final ? (
+              <Text style={[adminStyles.small, s.mt]}>
+                {a.gr ? `${a.gr} · section ${a.section || '—'}` : 'Admitted'}
+                {a.logins ? ` · parent login ${a.logins.parent} · student login ${a.logins.student}` : ''}
+              </Text>
+            ) : (
+              <>
+                <Step n={1} title="Principal approval" done={approved}>
+                  {approved ? (
+                    <Text style={adminStyles.small}>Approved</Text>
+                  ) : canApprove && pending ? (
+                    <Button label="Approve now" icon={ShieldCheck} variant="outline" style={s.smallBtn} onPress={guard(() => approve(r))} />
+                  ) : (
+                    <Text style={adminStyles.small}>{pending ? 'Waiting for the Principal' : 'Sent when the candidate was selected'}</Text>
+                  )}
+                </Step>
 
-            <Step n={2} title="Allot section" done={!!a?.gr}>
-              <Chips
-                options={SECTIONS}
-                value={a?.section ?? 'A'}
-                onChange={guard((v: string) => {
-                  if (!a || a.gr) {
-                    toast(a?.gr ? 'Section is fixed after the GR No. is generated' : 'Send for approval first');
-                    return;
-                  }
-                  patch(r.regNo, x => ({ ...x, admission: { ...a, section: v } }), `${r.regNo}: section ${v}`);
-                })}
-              />
-            </Step>
+                <Step n={2} title="Allot section" done={!!a.section}>
+                  <Chips
+                    options={SECTIONS}
+                    value={a.section || 'A'}
+                    onChange={guard((v: string) => {
+                      patchLocal(r.regNo, { admission: { ...a, section: v } });
+                      logAudit('Admission', `${r.regNo}: section ${v}`);
+                    })}
+                  />
+                </Step>
 
-            <Step n={3} title="GR No., roll number and admission voucher" done={!!a?.gr}>
-              {a?.gr ? (
-                <Text style={adminStyles.small}>{a.gr} · Roll {a.roll} · voucher {a.feeVoucher}</Text>
-              ) : (
-                <Button
-                  label="Generate"
-                  variant="outline"
-                  style={s.smallBtn}
-                  onPress={guard(() => {
-                    if (!a || !approved) {
-                      toast('Principal approval is needed first');
-                      return;
-                    }
-                    const gr = nextGr(r.campus);
-                    const roll = 31 + regs.filter(x => x.cls === r.cls && x.admission?.gr).length;
-                    const voucher = `V-26-ADM-${r.regNo.slice(-4)}`;
-                    patch(r.regNo, x => ({ ...x, admission: { ...a, gr, roll, feeVoucher: voucher } }), `${r.name}: ${gr}, roll ${roll}, voucher ${voucher} ${formatRs(ADMISSION_FEE)}`);
-                    toast(`${gr} generated. Admission voucher ${formatRs(ADMISSION_FEE)} created.`);
-                  })}
-                />
-              )}
-            </Step>
+                <Step n={3} title={`Admission fee ${formatRs(ADMISSION_FEE)}`} done={a.feePaid}>
+                  {a.feePaid ? (
+                    <Text style={adminStyles.small}>Paid</Text>
+                  ) : (
+                    <Button
+                      label="Mark paid"
+                      icon={Receipt}
+                      variant="outline"
+                      style={s.smallBtn}
+                      onPress={guard(() => {
+                        patchLocal(r.regNo, { admission: { ...a, feePaid: true } });
+                        logAudit('Admission', `${r.regNo}: admission fee paid`);
+                      })}
+                    />
+                  )}
+                </Step>
 
-            <Step n={4} title={`Admission fee ${formatRs(ADMISSION_FEE)}`} done={!!a?.feePaid}>
-              {a?.feePaid ? (
-                <Text style={adminStyles.small}>Paid</Text>
-              ) : (
-                <Button
-                  label="Mark paid"
-                  icon={Receipt}
-                  variant="outline"
-                  style={s.smallBtn}
-                  onPress={guard(() => {
-                    if (!a?.gr) {
-                      toast('Generate the admission voucher first');
-                      return;
-                    }
-                    patch(r.regNo, x => ({ ...x, admission: { ...a, feePaid: true } }), `${a.feeVoucher} paid`);
-                  })}
-                />
-              )}
-            </Step>
-
-            <Step n={5} title="Portal logins" done={!!a?.logins}>
-              {a?.logins ? (
-                <Text style={adminStyles.small}>
-                  Parent: {a.logins.parent}{a.logins.siblings ? ` (linked to ${a.logins.siblings} sibling${a.logins.siblings > 1 ? 's' : ''})` : ''} · Student: {a.logins.student}
-                </Text>
-              ) : (
-                <Button
-                  label="Create logins"
-                  icon={KeyRound}
-                  variant="outline"
-                  style={s.smallBtn}
-                  onPress={guard(() => {
-                    if (!a?.gr) {
-                      toast('Generate the GR No. first');
-                      return;
-                    }
-                    const logins = { parent: r.mobile, student: a.gr, siblings: sibs.length };
-                    patch(r.regNo, x => ({ ...x, admission: { ...a, logins } }), `Logins created for ${r.name}`);
-                    toast(sibs.length ? `Parent login linked to ${sibs.length} existing children by father CNIC` : 'Parent and student logins created. SMS sent (demo).');
-                  })}
-                />
-              )}
-            </Step>
-
-            {a && !a.final ? (
-              <Button
-                label="Confirm admission"
-                icon={UserCheck}
-                style={s.mt}
-                onPress={guard(() => {
-                  const next = finalize(r);
-                  if (!next.admission?.final) {
-                    toast(
-                      !approved
-                        ? 'Waiting for Principal approval'
-                        : !a.gr
-                        ? 'Generate the GR No. first'
-                        : !a.logins
-                        ? 'Create portal logins first'
-                        : 'Admission fee must be paid first',
-                    );
-                    return;
-                  }
-                  patch(r.regNo, () => next, `Admission final: ${r.name} ${a.gr}`);
-                  toast('Admission confirmed');
-                })}
-              />
-            ) : null}
+                <Step n={4} title="GR No., student record and portal logins" done={false}>
+                  <Button
+                    label={busy === r.id ? 'Admitting…' : 'Admit and create logins'}
+                    icon={KeyRound}
+                    variant="outline"
+                    style={s.smallBtn}
+                    onPress={guard(() => {
+                      if (busy) {
+                        return;
+                      }
+                      if (!approved) {
+                        toast('Waiting for Principal approval');
+                        return;
+                      }
+                      if (rules.admissionNeedsFee && !a.feePaid) {
+                        toast('Admission fee must be paid first');
+                        return;
+                      }
+                      admit(r);
+                    })}
+                  />
+                </Step>
+                <NoApiBanner what="Admission fee voucher (marked paid in this app)" />
+              </>
+            )}
+            {a.final ? <Badge label="Student created" tone="success" /> : null}
           </Card>
         );
       })}

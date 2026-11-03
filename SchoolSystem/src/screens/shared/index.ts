@@ -20,17 +20,21 @@ export {
   DiaryScreen,
   EventsCard,
   ExamsScreen,
+  gradeFor,
   HomeworkContent,
   HomeworkScreen,
+  hwBucket,
   ReportCardScreen,
   ResultsScreen,
   TimetableScreen,
-  useHomeworkStatus,
+  useCalendar,
+  useHomework,
+  useNotices,
+  useTimetable,
 } from './academics';
 export type { HwStatus } from './academics';
 export { LibraryScreen, NoticesScreen, TransportScreen } from './info';
-export { useChildFee, voucherLines } from './fee';
-export type { Receipt } from './fee';
+export * from './data';
 
 export const sharedScreens: ScreenMap = {
   Attendance: AttendanceScreen,
