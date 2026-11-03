@@ -404,4 +404,9 @@ export const teacherApi = {
   reports: (kind = 'strength') => api.get<Array<Record<string, unknown>>>('/api/mobile/teacher/reports', { kind }),
   notices: () => api.get<NoticeDto[]>('/api/mobile/notices'),
   calendar: () => api.get<CalendarDto>('/api/mobile/calendar'),
+  // Exam list for marks entry (server fix: teachers may call /exams).
+  exams: () =>
+    api.get<{
+      exams: Array<{ id: number; name: string; startDate: string | null; endDate: string | null; resultStatus: string; marksOpen?: boolean; locked?: boolean }>;
+    }>('/api/mobile/exams'),
 };

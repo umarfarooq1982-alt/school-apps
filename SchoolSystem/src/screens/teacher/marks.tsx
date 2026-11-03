@@ -6,7 +6,6 @@ import {
   Button,
   Card,
   Chips,
-  Field,
   InfoBanner,
   ListRow,
   RowWrap,
@@ -35,8 +34,13 @@ const isInvalid = (v: string, max: number) => {
 export function TeacherMarks() {
   const { t } = useI18n();
   const { classes, current, setPicked, today } = useMyClasses();
-  // No teacher API lists exams yet, so the exam number is entered here.
-  const [examId, setExamId] = useShared<string>('teacher.examId', '1');
+  // Exams come from the server; default to the newest exam open for entry.
+  const examsQ = useApi('teacher.exams', teacherApi.exams);
+  const examList = examsQ.data?.exams || [];
+  const [pickedExam, setExamId] = useShared<string>('teacher.examId', '');
+  const examId =
+    pickedExam || String((examList.find(e => e.marksOpen && !e.locked) || examList[0])?.id ?? '');
+  const examLabel = (e: { id: number; name: string }) => `${e.name} (#${e.id})`;
   const [subjectId, setSubjectId] = useState<number | null | undefined>(undefined);
   const subject = current?.subjects.find(x => x.subjectId === subjectId) || current?.subjects[0];
   const key =
@@ -123,7 +127,20 @@ export function TeacherMarks() {
                 onChange={n => setSubjectId(current.subjects.find(x => x.subject === n)?.subjectId ?? null)}
               />
             ) : null}
-            <Field label="Exam no." value={examId} onChangeText={v => setExamId(v.replace(/\D/g, ''))} keyboardType="number-pad" />
+            {examList.length ? (
+              <Chips
+                options={examList.map(examLabel)}
+                value={examLabel(examList.find(e => String(e.id) === examId) || examList[0])}
+                onChange={label => {
+                  const e = examList.find(x => examLabel(x) === label);
+                  if (e) {
+                    setExamId(String(e.id));
+                  }
+                }}
+              />
+            ) : examsQ.data ? (
+              <InfoBanner text="No exam has been created yet. Ask the Exam Controller." />
+            ) : null}
             <QueryView q={q} isEmpty={d => d.students.length === 0} emptyText="No students in this class.">
               {d => (
                 <>

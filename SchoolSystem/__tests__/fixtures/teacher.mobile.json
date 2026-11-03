@@ -713,5 +713,30 @@
    "notifications": true,
    "rtl": false
   }
+ },
+ "/api/mobile/exams": {
+  "data": {
+   "student": null,
+   "exams": [
+    {
+     "id": 1,
+     "name": "Mid-term 2026",
+     "startDate": "2026-10-12",
+     "endDate": "2026-10-20",
+     "resultStatus": "draft",
+     "marksOpen": true,
+     "locked": false
+    },
+    {
+     "id": 2,
+     "name": "Final term 2026",
+     "startDate": "2026-12-01",
+     "endDate": "2026-12-12",
+     "resultStatus": "draft",
+     "marksOpen": false,
+     "locked": false
+    }
+   ]
+  }
  }
 }

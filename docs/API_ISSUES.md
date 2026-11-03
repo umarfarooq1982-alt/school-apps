@@ -105,10 +105,11 @@ the live server (fixes, tenant isolation and old endpoints); all pass.
 | L3 | Swagger page `/api/mobile/docs` redirects to `/api/docs`. |
 | L4 | Generic 500 message "Something went wrong" hides the reason; 4xx messages are good. |
 
-## Batch 3 — tested on staging, for the backend developer to apply
+## Batch 3 — LIVE (deployed by the backend developer)
 
-These fixes passed the staging checks but are **not deployed**; the backend
-developer applies them (see "For the backend developer" in the handover).
+Deployed on 3 Nov 2026. Checked on the live API: 40/41 fix checks (the one
+difference was test data — the child now has an assigned route) and an
+end-to-end run of all four apps, 188/188.
 
 | Issue | Fix |
 |---|---|
