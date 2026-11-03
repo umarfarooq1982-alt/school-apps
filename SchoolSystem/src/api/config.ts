@@ -2,8 +2,9 @@
 // the tenant at login (SOW 2, S-02 multi-tenant).
 export const API_BASE_URL = 'https://school.digitalkarobar.shop';
 
-// Pre-filled on the sign-in screens; the user can change it.
-export const DEFAULT_SCHOOL_CODE = 'SBS';
+// No school code is built in: the user types their school's code once and the
+// app remembers it (and the school's name and logo) on the phone.
+export const DEFAULT_SCHOOL_CODE = '';
 
 export const REQUEST_TIMEOUT_MS = 20000;
 

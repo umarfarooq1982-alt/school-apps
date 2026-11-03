@@ -1,86 +1,79 @@
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Briefcase, ChevronLeft, GraduationCap, Lock } from 'lucide-react-native';
-import { Button, Field, IconButton, InfoBanner, Screen, toast } from '../components/ui';
+import { StyleSheet, Text, View } from 'react-native';
+import { Briefcase, GraduationCap, Lock } from 'lucide-react-native';
+import { Button, Card, Field, InfoBanner, Screen, toast } from '../components/ui';
+import { QueryView } from '../components/states';
 import { colors } from '../theme';
 import { ScreenMap, useNav } from '../navigation';
 import { useSession } from '../store';
 import { authApi } from '../api/mobile';
-import { useMutation } from '../api/hooks';
+import { api } from '../api/client';
+import { useApi, useMutation } from '../api/hooks';
+import { useSchoolName } from '../api/tenant';
 import { useI18n } from '../i18n';
-import {
-  PARENT_PUSH,
-  SCHOOL,
-  STUDENT_PUSH,
-  TODAY_LABEL,
-} from '../data/school';
 
-const TEACHER_PUSH = [
-  { text: 'Substitution today: period 5, Class 7-B Science', when: 'now' },
-  { text: 'Attendance for 5-A is not marked yet (cut-off 10:00)', when: '7:20' },
-  { text: "Leave request from Ahmed Khan's parent", when: 'Yesterday' },
-  { text: 'Lesson plan for week of 19 Oct approved', when: 'Mon' },
-  { text: 'Salary slip for September is ready', when: '1 Oct' },
-];
+type NoticeRow = { id: string | number; title: string; body: string; bodyUrdu?: string | null; at: string };
 
-const ADMIN_PUSH = [
-  { text: '5 approvals are waiting: admission, discount, fine waiver, leave, result', when: 'now' },
-  { text: 'Collection today Rs. 682,400 across 3 campuses', when: '1:45' },
-  { text: '2 teachers absent today; 5 periods need substitutes', when: '8:05' },
-  { text: 'Low stock: uniform shirt size 28 (6 left)', when: 'Yesterday' },
-  { text: 'Vehicle LEA-4512 fitness certificate expires in 12 days', when: 'Mon' },
-];
+function when(at: string) {
+  const d = new Date(at);
+  if (Number.isNaN(d.getTime())) {
+    return '';
+  }
+  const mins = Math.round((Date.now() - d.getTime()) / 60000);
+  if (mins < 60) {
+    return `${Math.max(1, mins)}m`;
+  }
+  if (mins < 24 * 60) {
+    return `${Math.round(mins / 60)}h`;
+  }
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
 
-// Push notifications, shown the way they appear on the phone lock screen.
+// Notifications: the school's real notices for this login (parents, students
+// and teachers from the mobile API, staff from the web API).
 function Notifications() {
-  const nav = useNav();
-  const insets = useSafeAreaInsets();
   const { role } = useSession();
-  const { t } = useI18n();
-  const items =
-    role === 'admin'
-      ? ADMIN_PUSH
-      : role === 'teacher'
-      ? TEACHER_PUSH
-      : role === 'student'
-      ? STUDENT_PUSH
-      : PARENT_PUSH;
+  const { t, lang } = useI18n();
+  const schoolName = useSchoolName();
+  const q = useApi<NoticeRow[]>(`notices.${role}`, async () => {
+    if (role === 'admin') {
+      const rows = await api.get<
+        Array<{ id: string; title: string; text?: string; body?: string; bodyUrdu?: string | null; at: string }>
+      >('/api/web/notices');
+      return rows.map(r => ({ id: r.id, title: r.title, body: r.text ?? r.body ?? '', bodyUrdu: r.bodyUrdu, at: r.at }));
+    }
+    const rows = await api.get<Array<{ id: number; title: string; body: string; bodyUrdu: string | null; at: string }>>(
+      '/api/mobile/notices',
+    );
+    return rows.map(r => ({ id: r.id, title: r.title, body: r.body, bodyUrdu: r.bodyUrdu, at: r.at }));
+  });
   const Icon = role === 'teacher' ? Briefcase : GraduationCap;
-  const time = role === 'teacher' ? '7:31' : '9:41';
   return (
-    <View style={[s.lock, { paddingTop: insets.top + 8 }]}>
-      <View style={s.lockTop}>
-        <IconButton
-          icon={ChevronLeft}
-          onPress={nav.pop}
-          style={s.lockBack}
-          color={colors.white}
-        />
-        <Text style={s.lockTitle}>{t('Notifications')}</Text>
-      </View>
-      <ScrollView contentContainerStyle={s.lockBody}>
-        <Text style={s.clock}>{time}</Text>
-        <Text style={s.date}>{TODAY_LABEL}</Text>
-        {items.map((n, i) => (
-          <View key={i} style={s.note}>
-            <View style={s.noteIcon}>
-              <Icon size={16} color={colors.text} />
-            </View>
-            <View style={s.flex}>
-              <View style={s.noteHead}>
-                <Text style={s.noteApp}>{SCHOOL}</Text>
-                <Text style={s.noteWhen}>{n.when}</Text>
+    <Screen title="Notifications" subtitle={schoolName} refreshing={q.refreshing} onRefresh={q.refresh}>
+      <QueryView q={q} isEmpty={d => d.length === 0} emptyText="No notices yet.">
+        {rows => (
+          <Card>
+            {rows.map((n, i) => (
+              <View key={String(n.id)} style={[s.row, i < rows.length - 1 && s.rowDivider]}>
+                <View style={s.noteIcon}>
+                  <Icon size={16} color={colors.text} />
+                </View>
+                <View style={s.flex}>
+                  <View style={s.noteHead}>
+                    <Text style={s.noteTitle} numberOfLines={1}>
+                      {n.title}
+                    </Text>
+                    <Text style={s.noteWhen}>{when(n.at)}</Text>
+                  </View>
+                  <Text style={s.noteText}>{lang === 'ur' && n.bodyUrdu ? n.bodyUrdu : n.body}</Text>
+                </View>
               </View>
-              <Text style={s.noteText}>{n.text}</Text>
-            </View>
-          </View>
-        ))}
-        <Text style={s.lockHint}>
-          Real push alerts arrive once the school server is connected.
-        </Text>
-      </ScrollView>
-    </View>
+            ))}
+          </Card>
+        )}
+      </QueryView>
+      <Text style={s.hint}>{t('Phone push alerts start once the school turns them on.')}</Text>
+    </Screen>
   );
 }
 
@@ -121,36 +114,8 @@ export const commonScreens: ScreenMap = { Notifications, ChangePassword };
 
 const s = StyleSheet.create({
   flex: { flex: 1 },
-  lock: { flex: 1, backgroundColor: '#1B1310' },
-  lockTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 16,
-  },
-  lockBack: { backgroundColor: 'rgba(255,255,255,0.08)', borderColor: 'rgba(255,255,255,0.15)' },
-  lockTitle: { color: colors.white, fontSize: 18, fontWeight: '800' },
-  lockBody: { padding: 14, gap: 10, paddingBottom: 40 },
-  clock: {
-    color: colors.white,
-    fontSize: 64,
-    fontWeight: '300',
-    textAlign: 'center',
-    marginTop: 20,
-  },
-  date: {
-    color: '#D9D2CB',
-    fontSize: 15,
-    textAlign: 'center',
-    marginBottom: 18,
-  },
-  note: {
-    flexDirection: 'row',
-    gap: 10,
-    backgroundColor: '#E6E3E1',
-    borderRadius: 18,
-    padding: 12,
-  },
+  row: { flexDirection: 'row', gap: 10, paddingVertical: 11 },
+  rowDivider: { borderBottomWidth: 1, borderBottomColor: colors.border },
   noteIcon: {
     width: 34,
     height: 34,
@@ -159,14 +124,9 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  noteHead: { flexDirection: 'row', justifyContent: 'space-between' },
-  noteApp: { fontSize: 12.5, fontWeight: '800', color: colors.text },
+  noteHead: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
+  noteTitle: { flex: 1, fontSize: 14, fontWeight: '800', color: colors.text },
   noteWhen: { fontSize: 11.5, color: colors.textMuted },
-  noteText: { fontSize: 13, color: colors.text, marginTop: 1 },
-  lockHint: {
-    color: '#8F8781',
-    fontSize: 12,
-    textAlign: 'center',
-    marginTop: 14,
-  },
+  noteText: { fontSize: 13, color: colors.text, marginTop: 2, lineHeight: 18 },
+  hint: { fontSize: 12, color: colors.textMuted, textAlign: 'center' },
 });

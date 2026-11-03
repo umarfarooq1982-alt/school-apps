@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   BookOpen,
@@ -29,10 +29,10 @@ import { colors, radius } from '../theme';
 import { ScreenMap, useNav, useParam } from '../navigation';
 import { Role, useSession, useShared } from '../store';
 import { useI18n } from '../i18n';
-import { SCHOOL } from '../data/school';
 import { authApi, LoginResult } from '../api/mobile';
 import { completeSignIn, signOutEverywhere } from '../api/auth';
-import { errorMessage } from '../api/client';
+import { ApiError, errorMessage } from '../api/client';
+import { logoUri, lookupSchool, saveTenant, useSchoolName, useTenant } from '../api/tenant';
 import { DEFAULT_SCHOOL_CODE } from '../api/config';
 import { getSession, loadSchoolCode, saveSchoolCode } from '../api/session';
 
@@ -50,28 +50,91 @@ const ROLE_LABEL: Record<Role, string> = {
   admin: 'School admin',
 };
 
-// School code shared by every sign-in screen and remembered on the phone.
+// School code shared by every sign-in screen. Nothing is built in: the last
+// code the user signed in with is read from the phone once, at start.
+let codeLoaded = false;
 export function useSchoolCode() {
-  const [code, setCode] = useShared<string>('auth.schoolCode', '');
+  const [code, setCode] = useShared<string>('auth.schoolCode', DEFAULT_SCHOOL_CODE);
   useEffect(() => {
-    if (!code) {
-      loadSchoolCode(DEFAULT_SCHOOL_CODE).then(setCode);
+    if (!codeLoaded) {
+      codeLoaded = true;
+      loadSchoolCode('').then(saved => {
+        if (saved) {
+          setCode(prev => prev || saved);
+        }
+      });
     }
-  }, [code, setCode]);
-  return [code || DEFAULT_SCHOOL_CODE, setCode] as const;
+  }, [setCode]);
+  return [code, setCode] as const;
 }
 
+// Looks the code up on the server and shows the school's name and logo, so the
+// user knows they are signing in to the right school.
 export function SchoolCodeField() {
+  const { t } = useI18n();
   const [code, setCode] = useSchoolCode();
+  const tenant = useTenant();
+  const [state, setState] = useState<'idle' | 'checking' | 'found' | 'missing' | 'error'>('idle');
+  const [message, setMessage] = useState('');
+  useEffect(() => {
+    const c = code.trim();
+    if (c.length < 2) {
+      setState('idle');
+      return;
+    }
+    if (tenant && tenant.code.toUpperCase() === c.toUpperCase()) {
+      setState('found');
+      return;
+    }
+    setState('checking');
+    let live = true;
+    const timer = setTimeout(() => {
+      lookupSchool(c)
+        .then(found => {
+          if (live) {
+            saveTenant(found);
+            setState('found');
+          }
+        })
+        .catch(e => {
+          if (live) {
+            setState(e instanceof ApiError && e.status === 404 ? 'missing' : 'error');
+            setMessage(errorMessage(e));
+          }
+        });
+    }, 500);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [code, tenant]);
+  const logo = logoUri(tenant);
   return (
-    <Field
-      label="School code"
-      icon={Building}
-      value={code}
-      onChangeText={v => setCode(v.toUpperCase().trim())}
-      autoCapitalize="characters"
-      placeholder="e.g. SBS"
-    />
+    <View style={s.codeWrap}>
+      <Field
+        label="School code"
+        icon={Building}
+        value={code}
+        onChangeText={v => setCode(v.toUpperCase().replace(/\s/g, ''))}
+        autoCapitalize="characters"
+        autoCorrect={false}
+        placeholder={t('Your school code')}
+      />
+      {state === 'found' && tenant ? (
+        <View style={s.schoolRow}>
+          {logo ? <Image source={{ uri: logo }} style={s.schoolLogo} /> : <Building size={18} color={colors.success} />}
+          <Text style={s.schoolName} numberOfLines={1}>{tenant.name}</Text>
+        </View>
+      ) : state === 'checking' ? (
+        <Text style={s.codeHint}>{t('Checking school code…')}</Text>
+      ) : state === 'missing' ? (
+        <Text style={s.codeError}>{t('No active school has this code. Check it with your school office.')}</Text>
+      ) : state === 'error' ? (
+        <Text style={s.codeError}>{message}</Text>
+      ) : (
+        <Text style={s.codeHint}>{t('Ask your school office for the school code.')}</Text>
+      )}
+    </View>
   );
 }
 
@@ -100,8 +163,8 @@ export function usePasswordLogin(expected: Role) {
   const [schoolCode] = useSchoolCode();
   const [busy, setBusy] = useState(false);
   const login = async (key: string, password: string) => {
-    if (!schoolCode) {
-      toast('Enter the school code');
+    if (!schoolCode.trim()) {
+      toast('Enter your school code');
       return;
     }
     setBusy(true);
@@ -132,7 +195,13 @@ function LanguageSwitch() {
   );
 }
 
+// The school's own logo once its code is known, otherwise a neutral icon.
 export function Logo({ icon: Icon = GraduationCap }: { icon?: IconType }) {
+  const tenant = useTenant();
+  const uri = logoUri(tenant);
+  if (uri) {
+    return <Image source={{ uri }} style={s.logoImage} />;
+  }
   return (
     <View style={s.logo}>
       <Icon size={28} color={colors.text} strokeWidth={2} />
@@ -143,6 +212,7 @@ export function Logo({ icon: Icon = GraduationCap }: { icon?: IconType }) {
 // ---------- Role select ----------
 
 function RoleSelect() {
+  const schoolName = useSchoolName();
   const nav = useNav();
   const { t } = useI18n();
   const insets = useSafeAreaInsets();
@@ -189,7 +259,7 @@ function RoleSelect() {
       contentStyle={insets.top ? s.roleTopInset : s.roleTop}
     >
       <Logo />
-      <Text style={s.h1}>{SCHOOL}</Text>
+      <Text style={s.h1}>{schoolName}</Text>
       <Text style={s.lead}>{t('Who is signing in?')}</Text>
       <Text style={s.sub}>{t('Choose your app to continue.')}</Text>
       <Gap h={4} />
@@ -223,6 +293,7 @@ function normaliseMobile(input: string) {
 }
 
 function ParentSignIn() {
+  const schoolName = useSchoolName();
   const nav = useNav();
   const [schoolCode] = useSchoolCode();
   const { login, busy } = usePasswordLogin('parent');
@@ -259,7 +330,7 @@ function ParentSignIn() {
   return (
     <Screen footer={<LanguageSwitch />}>
       <Logo />
-      <Text style={s.h1}>{SCHOOL}</Text>
+      <Text style={s.h1}>{schoolName}</Text>
       <Text style={s.sub}>Parent app. One login for all your children.</Text>
       <SchoolCodeField />
       <Segmented
@@ -675,6 +746,7 @@ function StudentReset() {
 // ---------- Teacher ----------
 
 function TeacherSignIn() {
+  const schoolName = useSchoolName();
   const nav = useNav();
   const { login, busy } = usePasswordLogin('teacher');
   const [id, setId] = useState('');
@@ -699,7 +771,7 @@ function TeacherSignIn() {
     >
       <Logo icon={Briefcase} />
       <Text style={s.h1}>Teacher app</Text>
-      <Text style={s.sub}>{SCHOOL}</Text>
+      <Text style={s.sub}>{schoolName}</Text>
       <SchoolCodeField />
       <Field
         label="Email or mobile"
@@ -745,6 +817,13 @@ const s = StyleSheet.create({
   flex: { flex: 1 },
   pressed: { opacity: 0.7 },
   roleTop: { paddingTop: 40 },
+  logoImage: { width: 60, height: 60, borderRadius: 16, marginTop: 24, backgroundColor: colors.card },
+  codeWrap: { gap: 6 },
+  schoolRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.successSoft, borderRadius: radius.md, paddingHorizontal: 10, paddingVertical: 7 },
+  schoolLogo: { width: 22, height: 22, borderRadius: 6 },
+  schoolName: { flex: 1, fontSize: 13.5, fontWeight: '800', color: colors.success },
+  codeHint: { fontSize: 12, color: colors.textMuted },
+  codeError: { fontSize: 12, color: colors.danger, fontWeight: '700' },
   roleTopInset: { paddingTop: 24 },
   logo: {
     width: 60,

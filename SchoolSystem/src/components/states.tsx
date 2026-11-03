@@ -52,6 +52,21 @@ export function NoApiBanner({ what }: { what?: string }) {
   );
 }
 
+// Replaces a screen part whose data the server cannot give yet. It shows no
+// sample rows, so real-school users never see made-up names or figures.
+export function NotAvailable({ what, detail }: { what: string; detail?: string }) {
+  const { t } = useI18n();
+  return (
+    <View style={s.na}>
+      <ServerOff size={26} color={colors.textFaint} />
+      <Text style={s.naTitle}>{t(what)}</Text>
+      <Text style={s.muted}>
+        {t(detail || 'This is not available from the school server yet. It will appear here once the school turns it on.')}
+      </Text>
+    </View>
+  );
+}
+
 // Renders loading / error / data for a query. Old data stays on screen while
 // it refreshes.
 export function QueryView<T>({
@@ -85,4 +100,15 @@ const s = StyleSheet.create({
   title: { fontSize: 16, fontWeight: '800', color: colors.text },
   muted: { fontSize: 13, color: colors.textMuted, textAlign: 'center', paddingHorizontal: 20 },
   btn: { marginTop: 6, alignSelf: 'center' },
+  na: {
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 26,
+    paddingHorizontal: 12,
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  naTitle: { fontSize: 15, fontWeight: '800', color: colors.text, textAlign: 'center' },
 });
