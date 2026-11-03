@@ -1,19 +1,5 @@
 import { ScreenMap } from '../../../navigation';
 import {
-  AdminHiring,
-  AdminStaffDirectory,
-  AdminStaffEnroll,
-  AdminStaffIdCards,
-  AdminStaffProfile,
-} from './staff';
-import {
-  AdminLeaveBalances,
-  AdminLeaveManagement,
-  AdminStaffAttSheet,
-  AdminStaffAttendance,
-} from './attendance';
-import { AdminExitCase, AdminExitClearance, AdminSalarySetup } from './pay';
-import {
   AdminHiringLive,
   AdminLeaveManagementLive,
   AdminStaffAttendanceLive,
@@ -22,27 +8,27 @@ import {
   AdminStaffIdCardsLive,
   makeStaffProfile,
 } from './live';
-import { sampleScreen } from '../accounts/live-kit';
+import { notAvailableScreen as na } from '../accounts/live-kit';
 
-// Contract routes open the server-backed screens; the earlier sample screens
-// stay reachable as "tools" for rules the server has no API for yet.
+// Every route shows server data. Where the server has no API yet the screen
+// says so plainly; no sample data is ever shown.
 export const adminHrScreens: ScreenMap = {
   AdminStaffDirectory: AdminStaffDirectoryLive,
-  AdminStaffProfile: makeStaffProfile(sampleScreen(AdminStaffProfile, 'sample staff record')),
+  AdminStaffProfile: makeStaffProfile(na('Staff profile', 'Staff member not found', 'Open a staff member from the staff directory.')),
   AdminHiring: AdminHiringLive,
   AdminStaffEnroll: AdminStaffEnrollLive,
   AdminStaffAttendance: AdminStaffAttendanceLive,
-  AdminStaffAttSheet: sampleScreen(AdminStaffAttSheet, 'monthly sheet and month lock'),
+  AdminStaffAttSheet: na('Monthly sheet', 'Monthly attendance sheet and month lock'),
   AdminLeaveManagement: AdminLeaveManagementLive,
-  AdminLeaveBalances: sampleScreen(AdminLeaveBalances, 'leave balances and carry-forward'),
-  AdminSalarySetup: sampleScreen(AdminSalarySetup, 'salary structures, loans and increments'),
-  AdminExitClearance: sampleScreen(AdminExitClearance, 'resignation and clearance checklist'),
-  AdminExitCase: sampleScreen(AdminExitCase, 'final settlement and experience letter'),
+  AdminLeaveBalances: na('Leave balances', 'Leave balances and carry-forward'),
+  AdminSalarySetup: na('Salary setup', 'Salary structures, loans and increments'),
+  AdminExitClearance: na('Exit & clearance', 'Resignation and clearance checklist'),
+  AdminExitCase: na('Exit case', 'Final settlement and experience letter'),
   AdminStaffIdCards: AdminStaffIdCardsLive,
-  AdminStaffDirectoryTools: sampleScreen(AdminStaffDirectory, 'contract and probation reminders'),
-  AdminHiringTools: sampleScreen(AdminHiring, 'openings and offer letters'),
-  AdminStaffEnrollTools: sampleScreen(AdminStaffEnroll, 'teaching assignment and login creation'),
-  AdminStaffAttendanceTools: sampleScreen(AdminStaffAttendance, 'device sync, corrections and timing rules'),
-  AdminLeaveManagementTools: sampleScreen(AdminLeaveManagement, 'leave policies and balance checks'),
-  AdminStaffIdCardsTools: sampleScreen(AdminStaffIdCards, 'sample ID cards'),
+  AdminStaffDirectoryTools: na('Contract reminders', 'Contract and probation reminders'),
+  AdminHiringTools: na('Offer letters', 'Openings and offer letters'),
+  AdminStaffEnrollTools: na('Teaching assignment', 'Teaching assignment and login creation'),
+  AdminStaffAttendanceTools: na('Attendance rules', 'Device sync, corrections and timing rules'),
+  AdminLeaveManagementTools: na('Leave policies', 'Leave policies and balance checks'),
+  AdminStaffIdCardsTools: na('ID card designs', 'ID card designs'),
 };

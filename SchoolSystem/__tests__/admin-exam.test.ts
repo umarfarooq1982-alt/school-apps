@@ -5,11 +5,9 @@ import {
   GRADING_SEED,
   PASS_SEED,
   annualPercentage,
-  classMarks,
   compileResults,
   gradeFor,
   rank,
-  RESULT_SUBJECTS,
   subjectAverages,
   StudentMarks,
 } from '../src/data/admin-exam';
@@ -102,8 +100,15 @@ describe('result compilation', () => {
     expect(avg[1]).toEqual({ name: 'Maths', avg: 35 });
   });
 
-  test('dummy class compiles without errors and has ties and fails', () => {
-    const res = compileResults(classMarks('Class 5', 'Mid-term'), RESULT_SUBJECTS, GRADING_SEED, PASS_SEED);
+  test('a full class compiles without errors and has ties and fails', () => {
+    const subs = ['English', 'Mathematics', 'Urdu', 'Science', 'Islamiat'].map(name => ({ name, max: 100 }));
+    const cls: StudentMarks[] = Array.from({ length: 24 }, (_, i) => ({
+      id: `s${i}`,
+      name: `Student ${i + 1}`,
+      section: i % 2 ? 'B' : 'A',
+      marks: Object.fromEntries(subs.map((x, j) => [x.name, i === 3 || i === 5 ? 80 + j : i === 7 && j === 1 ? 28 : i === 13 && j === 3 ? 'Abs' : 55 + ((i * 37 + j * 23) % 44)])),
+    }));
+    const res = compileResults(cls, subs, GRADING_SEED, PASS_SEED);
     expect(res.length).toBe(24);
     expect(res.some(x => !x.pass)).toBe(true);
     const positions = res.map(x => x.classPosition);

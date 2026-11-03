@@ -72,7 +72,7 @@ export function AdminMessagesLive(_: ScreenProps) {
   };
 
   return (
-    <LiveScreen title="Messages & broadcast" subtitle="SMS, WhatsApp, email and push from one place" q={q} toolsRoute="AdminMessagesTools" toolsLabel="Templates, scheduling, alert toggles & SMS credit (sample)">
+    <LiveScreen title="Messages & broadcast" subtitle="SMS, WhatsApp, email and push from one place" q={q}>
       <QueryView q={gateway}>
         {g => (
           <Card title="Gateways">

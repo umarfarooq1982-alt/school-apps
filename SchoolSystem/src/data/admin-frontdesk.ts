@@ -1,7 +1,7 @@
-// Dummy data and shared state for the Front Desk / Admission panel
+// Shared state for the Front Desk / Admission panel, built from server data
 // (SOW 3.2 C: M-02, S-03, S-05, S-10).
 import { getShared, setShared, useShared } from '../store';
-import { AdminStudent, CAMPUSES, CLASSES } from './admin';
+import { AdminStudent } from './admin';
 import { useApi } from '../api/hooks';
 import { field, webA, WebStudent } from '../api/webA';
 import { useModuleList } from '../screens/admin/owner/shared';
@@ -12,10 +12,11 @@ import { getSession } from '../api/session';
 export function useLiveClasses() {
   const q = useApi('adm:academic', webA.academic);
   const classes = q.data?.classes ?? [];
-  const names = classes.length ? classes.map(c => c.name) : CLASSES;
+  const names = classes.map(c => c.name);
   return {
     names,
     classes,
+    sectionsOf: (name: string) => classes.find(c => c.name === name)?.sections.map(x => x.name) ?? [],
     idOf: (name: string) => classes.find(c => c.name === name)?.id,
     nameOf: (id: unknown) => classes.find(c => String(c.id) === String(id))?.name ?? (id ? `Class #${id}` : '—'),
   };
@@ -39,7 +40,13 @@ export type Inquiry = {
   notes: string;
 };
 
-export const FRONT_STAFF = ['Saba Noreen', 'Hina Tariq', 'Adeel Khan'];
+// Staff a follow-up can be assigned to: the school's own users from the server.
+export function useFrontStaff(): string[] {
+  const q = useApi('adm:users', webA.users);
+  const names = (q.data ?? []).filter(u => !u.disabled && u.role !== 'parent' && u.role !== 'student').map(u => u.name);
+  const me = getSession()?.user.name;
+  return names.length ? names : me ? [me] : [];
+}
 export const FOLLOW_UP_DATES = ['Today', 'Tomorrow', 'In 2 days', 'In 3 days', 'Next week'];
 export const SOURCES: InquirySource[] = ['Walk-in', 'Call', 'Website', 'Facebook'];
 export const INQUIRY_STATUSES: InquiryStatus[] = ['New', 'Contacted', 'Visited', 'Registered', 'Lost'];
@@ -64,7 +71,7 @@ export function useInquiries() {
         source: SOURCES.find(x => x.toLowerCase() === source) ?? 'Walk-in',
         status: INQUIRY_STATUSES.find(x => x.toLowerCase() === status) ?? 'New',
         followUp: extra[id]?.followUp ?? 'Tomorrow',
-        assigned: extra[id]?.assigned ?? FRONT_STAFF[0],
+        assigned: extra[id]?.assigned ?? '',
         notes: field(r, 'notes'),
       };
     },
@@ -129,8 +136,6 @@ export type Admission = {
   final: boolean;
 };
 
-export const REG_FEE = 1500;
-export const ADMISSION_FEE = 15000;
 export const TEST_SUBJECTS = ['English', 'Mathematics', 'Urdu'];
 export const TEST_MAX = 50;
 
@@ -161,7 +166,7 @@ export function useRegistrations() {
       classId: String(r.classId ?? ''),
       campus: x.campus ?? '',
       feePaid: x.feePaid ?? !!r.feePaid,
-      feeAmount: Number(r.feeAmount) || REG_FEE,
+      feeAmount: Number(r.feeAmount) || 0,
       principal: r.principal ?? 'pending',
       status: r.status ?? 'registered',
       testId: x.testId,
@@ -228,18 +233,6 @@ export function meritList<T extends Pick<Registration, 'marks' | 'name'>>(regs: 
 
 // ---------- GR numbers: unique per campus, never reused (M-02) ----------
 
-const campusCode = (campus: string) =>
-  campus === 'girls' ? 'GC' : campus === 'jt' ? 'JT' : 'MC';
-
-export function nextGr(campus: string) {
-  const code = campusCode(campus);
-  const used = getShared<string[]>('fd.grUsed', []);
-  const all = [...liveStudents().map(s => s.gr), ...used].filter(g => g.startsWith(`GR-${code}-`));
-  const max = all.reduce((m, g) => Math.max(m, Number(g.split('-')[2]) || 0), 0);
-  const gr = `GR-${code}-${String(max + 1).padStart(4, '0')}`;
-  setShared<string[]>('fd.grUsed', prev => [...(prev ?? []), gr]);
-  return gr;
-}
 
 // Duplicate check on B-Form number and father CNIC (M-02 key rule).
 // Same B-Form = same child. Same father CNIC with the same child name is also
@@ -288,7 +281,6 @@ export const useStudentDocs = () =>
 
 export type CertType = 'Leaving' | 'Character' | 'Bonafide' | 'Other';
 export const CERT_TYPES: CertType[] = ['Leaving', 'Character', 'Bonafide', 'Other'];
-export const CERT_FEE: Record<CertType, number> = { Leaving: 500, Character: 300, Bonafide: 300, Other: 300 };
 
 export type CertRequest = {
   id: string;
@@ -304,11 +296,11 @@ export type CertRequest = {
 
 export type IssueLog = { serial: string; studentId: string; type: CertType; by: string; when: string };
 
-let certSeq = 120;
+let certSeq = 0;
 export function nextSerial(type: CertType) {
   certSeq += 1;
   const p = { Leaving: 'LC', Character: 'CC', Bonafide: 'BC', Other: 'OC' }[type];
-  return `${p}-26-${String(certSeq).padStart(4, '0')}`;
+  return `${p}-${String(new Date().getFullYear()).slice(2)}-${String(certSeq).padStart(4, '0')}`;
 }
 
 // ---------- Visitors, gate pass, call log (S-10) ----------
@@ -331,8 +323,6 @@ export const nowTime = () => {
   return `${((h + 11) % 12) + 1}:${m} ${h < 12 ? 'AM' : 'PM'}`;
 };
 
-export const campusOptions = CAMPUSES.map(c => c.name);
-export const campusIdByName = (name: string) => CAMPUSES.find(c => c.name === name)?.id ?? 'main';
 
 // ---------- Live students from the school server ----------
 // /api/web/students (and /fees/defaulters for dues) mapped to the AdminStudent

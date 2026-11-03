@@ -5,7 +5,6 @@ import {
   CalendarDays,
   Clock,
   Download,
-  File,
   Flag,
   GraduationCap,
   Lock,
@@ -38,12 +37,11 @@ import {
   TimetableGrid,
   toast,
 } from '../../components/ui';
-import { Empty, NoApiBanner, QueryView } from '../../components/states';
+import { Empty, NoApiBanner, NotAvailable, QueryView } from '../../components/states';
 import { colors, radius, Tone } from '../../theme';
 import { ScreenProps, useNav, useParam } from '../../navigation';
 import { useSession } from '../../store';
 import { useI18n } from '../../i18n';
-import { SYLLABUS } from '../../data/school';
 import { useCurrentChild } from '../../data/useChild';
 import { useApi } from '../../api/hooks';
 import { familyApi, HomeworkDto, ResultsDto, TimetableDto } from '../../api/mobile';
@@ -606,12 +604,7 @@ export function ExamsScreen(_: ScreenProps) {
       ) : null}
       {tab === 'Syllabus' ? (
         <>
-          <NoApiBanner what={t('Exam syllabus')} />
-          <Card title="Syllabus">
-            {SYLLABUS.map((sy, i) => (
-              <ListRow key={sy.subject} icon={File} title={sy.subject} subtitle={sy.text} last={i === SYLLABUS.length - 1} />
-            ))}
-          </Card>
+          <NotAvailable what="Exam syllabus" />
         </>
       ) : null}
       {tab === 'Results' ? <ResultsContent /> : null}

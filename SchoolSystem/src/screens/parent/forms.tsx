@@ -260,12 +260,6 @@ export function ParentNewComplaint(_: ScreenProps) {
 
 // ---------- Survey (P27) ----------
 
-const SAMPLE_QUESTIONS = [
-  'How satisfied are you with teaching?',
-  'How safe is school transport?',
-  'How clear is communication from the school?',
-];
-
 function surveyQuestions(r?: RecordDto): string[] | null {
   const qs = r?.questions;
   return Array.isArray(qs) && qs.every(x => typeof x === 'string') ? (qs as string[]) : null;
@@ -277,7 +271,8 @@ export function ParentSurvey(_: ScreenProps) {
   const q = useApi('family-surveys', familyApi.surveys);
   const survey = (q.data ?? []).find(x => x.status !== 'closed');
   const fromServer = surveyQuestions(survey);
-  const questions = fromServer ?? SAMPLE_QUESTIONS;
+  // Only the school's own questions; no survey open → nothing to answer.
+  const questions = fromServer ?? [];
   const [ratings, setRatings] = useState<number[]>([]);
   const [note, setNote] = useState('');
   const submit = useMutation(
@@ -300,13 +295,13 @@ export function ParentSurvey(_: ScreenProps) {
   return (
     <Screen
       title="Parent survey"
-      subtitle={`${survey?.title ?? t('Feedback')} · ${questions.length} ${t('questions')}`}
-      footer={<Button label="Send answers" onPress={send} loading={submit.busy} />}
+      subtitle={survey ? `${survey.title} · ${questions.length} ${t('questions')}` : undefined}
+      footer={questions.length ? <Button label="Send answers" onPress={send} loading={submit.busy} /> : undefined}
     >
       <QueryView q={q}>
         {() => (
           <>
-            {fromServer ? null : <NoApiBanner what={t('Survey questions')} />}
+            {questions.length ? null : <Empty text="No survey is open right now." />}
             {questions.map((qq, i) => (
               <Card key={qq}>
                 <Text style={s.question}>{t(qq)}</Text>
@@ -322,7 +317,9 @@ export function ParentSurvey(_: ScreenProps) {
                 />
               </Card>
             ))}
-            <Field label="Any suggestion?" value={note} onChangeText={setNote} multiline />
+            {questions.length ? (
+              <Field label="Any suggestion?" value={note} onChangeText={setNote} multiline />
+            ) : null}
           </>
         )}
       </QueryView>

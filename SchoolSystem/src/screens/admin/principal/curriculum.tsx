@@ -5,9 +5,11 @@ import { BookOpen, ChartColumn, ClipboardCheck, ListChecks } from 'lucide-react-
 import { Badge, Button, Card, Field, ListRow, ProgressBar, Screen, toast, Toggle } from '../../../components/ui';
 import { adminStyles as a, BarChart, FormSheet, KV, ListScreen, PickerField, Table, useReasonPrompt } from '../../../components/admin';
 import { ScreenProps, useNav, useParam } from '../../../navigation';
-import { CLASSES, logAudit } from '../../../data/admin';
+import { getSession } from '../../../api/session';
+import { useApi } from '../../../api/hooks';
+import { logAudit } from '../../../data/admin';
 import { Chapter, LessonPlan } from '../../../data/admin-principal';
-import { ModuleRow, field } from '../../../api/webA';
+import { ModuleRow, field, webA } from '../../../api/webA';
 import { localId, ReadOnlyBanner, useGuard, useModuleList } from '../owner/shared';
 
 // Chapters and lesson plans live in the "curriculum" module that the teacher
@@ -103,9 +105,12 @@ export function AdminCurrSyllabus(_: ScreenProps) {
   const { guard } = useGuard();
   const [add, setAdd] = useState<Chapter | null>(null);
   const subjects = Array.from(new Set(list.map(c => c.subject)));
+  const acad = useApi('adm:academic', webA.academic);
+  const classOptions = (acad.data?.classes ?? []).map(c => c.name);
+  const subjectOptions = (acad.data?.subjects ?? []).map(x => x.name);
   const save = () => {
-    if (!add || !add.title.trim()) {
-      toast('Enter the chapter title');
+    if (!add || !add.title.trim() || !add.cls || !add.subject) {
+      toast('Choose the class and subject, and enter the chapter title');
       return;
     }
     setList(l => [...l, add]);
@@ -125,7 +130,7 @@ export function AdminCurrSyllabus(_: ScreenProps) {
           { label: 'Subject', options: ['All', ...subjects], get: c => c.subject },
           { label: 'Term', options: ['All', 'First term', 'Mid-term', 'Final term'], get: c => c.term },
         ]}
-        onAdd={guard(() => setAdd({ id: localId('ch'), cls: 'Class 5', subject: 'English', term: 'Final term', title: '', done: false, teacher: 'Sadia Anwar' }))}
+        onAdd={guard(() => setAdd({ id: localId('ch'), cls: '', subject: '', term: 'Final term', title: '', done: false, teacher: getSession()?.user.name ?? '' }))}
         addLabel="Add chapter"
         header={<ReadOnlyBanner />}
         renderItem={(c, last) => (
@@ -139,8 +144,8 @@ export function AdminCurrSyllabus(_: ScreenProps) {
       />
       {add ? (
         <FormSheet visible onClose={() => setAdd(null)} title="Add chapter" onSubmit={save}>
-          <PickerField label="Class" value={add.cls} options={CLASSES} onChange={v => setAdd({ ...add, cls: v })} />
-          <PickerField label="Subject" value={add.subject} options={['English', 'Mathematics', 'Urdu', 'Science', 'Islamiat', 'Social Studies', 'Computer']} onChange={v => setAdd({ ...add, subject: v })} />
+          <PickerField label="Class" value={add.cls} options={classOptions} placeholder="Choose the class" onChange={v => setAdd({ ...add, cls: v })} />
+          <PickerField label="Subject" value={add.subject} options={subjectOptions} placeholder="Choose the subject" onChange={v => setAdd({ ...add, subject: v })} />
           <PickerField label="Term" value={add.term} options={['First term', 'Mid-term', 'Final term']} onChange={v => setAdd({ ...add, term: v })} />
           <Field label="Chapter" value={add.title} onChangeText={v => setAdd({ ...add, title: v })} placeholder="e.g. 10. Our Country" />
         </FormSheet>

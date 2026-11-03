@@ -26,7 +26,7 @@ import { logAudit, useStaffRole } from '../../../data/admin';
 import { invalidate, useApi, useMutation } from '../../../api/hooks';
 import { ContextDto, field, ModuleRow, webA } from '../../../api/webA';
 import { getSession } from '../../../api/session';
-import { Loading, NoApiBanner, QueryView } from '../../../components/states';
+import { Loading, NotAvailable, QueryView } from '../../../components/states';
 import { ReadOnlyBanner, useGuard } from './shared';
 
 export type CampusRow = ContextDto['campuses'][number];
@@ -42,7 +42,7 @@ const blank = (): CampusRow => ({
   code: '',
   address: '',
   phone: '',
-  timings: '7:45 AM – 1:40 PM',
+  timings: '',
   bankName: '',
   bankAccount: '',
 });
@@ -193,7 +193,7 @@ export function AdminCampusDetail(_: ScreenProps) {
         <KV k="Account no." v={c.bankAccount || '—'} last />
       </Card>
       <Card title="This month">
-        <NoApiBanner what="Per-campus collection, expenses and attendance" />
+        <NotAvailable what="Per-campus collection, expenses and attendance" />
       </Card>
       <Card>
         <Text style={a.bold}>Campus status</Text>

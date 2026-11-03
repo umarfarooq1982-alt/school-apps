@@ -1,5 +1,5 @@
 // HR screens backed by the school server (/api/web/staff, attendance/staff,
-// leave, modules/hiring). Rules without an API stay on the sample tools.
+// leave, modules/hiring). Parts without an API show a "not available" state.
 import React, { useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
 import { CalendarDays, Check, IdCard, LogOut, Pencil, Plus, Printer, UserPlus, Users, X } from 'lucide-react-native';
@@ -11,7 +11,6 @@ import { num, staffApi, StaffInput, usersApi, WebStaff, WebStaffDay } from '../.
 import { ScreenProps, useNav, useParam } from '../../../navigation';
 import { logAudit, useReadOnly } from '../../../data/admin';
 import { validCnic } from '../../../data/admin-hr';
-import { useApplicants } from './state';
 import { fmtDate, LiveScreen, liveStyles as ls, ModuleRecordsScreen, SearchBox, StatusBadge, todayIso, useFiltered } from '../accounts/live-kit';
 
 const TYPES = ['Permanent', 'Contract', 'Visiting'];
@@ -69,11 +68,11 @@ export function AdminStaffDirectoryLive(_: ScreenProps) {
 
 // ---------- Profile ----------
 
-export function makeStaffProfile(Sample: React.ComponentType<ScreenProps>) {
+export function makeStaffProfile(Fallback: React.ComponentType<ScreenProps>) {
   return function AdminStaffProfileLive(props: ScreenProps) {
     const id = String(useParam('id', ''));
     if (!/^\d+$/.test(id)) {
-      return <Sample {...props} />;
+      return <Fallback {...props} />;
     }
     return <StaffProfile id={id} />;
   };
@@ -215,9 +214,9 @@ function LoginStatus({ staff }: { staff: WebStaff }) {
 
 export function AdminStaffEnrollLive(_: ScreenProps) {
   const nav = useNav();
-  const applicantId = useParam('applicantId', '');
-  const [applicants] = useApplicants();
-  const applicant = applicants.find(a => a.id === applicantId);
+  // Opened from a hiring record: the applicant's name comes as a param.
+  const applicantName = String(useParam('name', ''));
+  const applicant = applicantName ? { name: applicantName } : undefined;
   const readOnly = useReadOnly();
   const [f, setF] = useState<Record<string, string>>(() => ({
     name: applicant?.name ?? '',
@@ -267,8 +266,8 @@ export function AdminStaffEnrollLive(_: ScreenProps) {
       title="Staff enrollment"
       subtitle="Employee ID is generated; CNIC must be unique"
       footer={<Button label="Save employee" icon={Check} onPress={submit} loading={create.busy} disabled={readOnly} />}
-      toolsRoute="AdminStaffEnrollTools"
-      toolsLabel="Subjects, probation reminders & login (sample)"
+     
+     
     >
       {applicant ? <InfoBanner tone="success" text={`From hiring: ${applicant.name}`} /> : null}
       <Field label="Full name *" value={f.name} onChangeText={v => set('name', v)} />
@@ -340,8 +339,8 @@ export function AdminStaffAttendanceLive(_: ScreenProps) {
       title="Staff attendance"
       subtitle="Manual entry; device sync and corrections are on the tools screen"
       q={q}
-      toolsRoute="AdminStaffAttendanceTools"
-      toolsLabel="Device sync, corrections, timing rules & month lock (sample)"
+     
+     
       footer={<Button label="Save attendance" icon={Check} onPress={submit} loading={save.busy} disabled={readOnly || !Object.keys(edits).length} />}
     >
       <PickerField label="Date" value={date} options={lastDays()} onChange={d => { setDate(d); setEdits({}); }} />
@@ -438,8 +437,8 @@ export function AdminLeaveManagementLive(_: ScreenProps) {
       title="Leave management"
       subtitle="Staff and student leave requests"
       q={q}
-      toolsRoute="AdminLeaveManagementTools"
-      toolsLabel="Policies, balances & carry-forward (sample)"
+     
+     
       footer={<Button label="Apply staff leave" icon={Plus} onPress={() => setOpen(true)} />}
     >
       <Segmented options={['Staff', 'Student']} value={kind} onChange={setKind} />
@@ -520,7 +519,7 @@ export function AdminHiringLive(_: ScreenProps) {
       ]}
       toBody={v => ({ name: v.name.trim(), title: v.name.trim(), position: v.position.trim(), mobile: v.mobile?.trim(), status: v.status || 'applied', remarks: v.remarks?.trim() })}
       addLabel="Add applicant"
-      toolsRoute="AdminHiringTools"
+     
     />
   );
 }

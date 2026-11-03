@@ -1,9 +1,8 @@
 // S-13 school settings, templates and integrations.
 import React, { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Image as ImageIcon, MessageSquare, Plug, Plus, X } from 'lucide-react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image as ImageIcon, Plus, X } from 'lucide-react-native';
 import {
-  Badge,
   Button,
   Card,
   Field,
@@ -16,24 +15,24 @@ import {
   toast,
   Toggle,
 } from '../../../components/ui';
-import { adminStyles as a, KV, ListScreen, PickerField } from '../../../components/admin';
-import { ScreenProps, useNav, useParam } from '../../../navigation';
+import { adminStyles as a, KV, PickerField } from '../../../components/admin';
+import { ScreenProps } from '../../../navigation';
 import { useShared } from '../../../store';
 import { logAudit, SchoolRules, STAFF_ROLES, useRules } from '../../../data/admin';
-import { Integration, INTEGRATIONS, TemplateDef, TEMPLATES } from '../../../data/admin-owner';
 import { colors, radius } from '../../../theme';
 import { ReadOnlyBanner, useGuard } from './shared';
 import { useApi, useMutation } from '../../../api/hooks';
 import { webA } from '../../../api/webA';
-import { NoApiBanner } from '../../../components/states';
+import { NotAvailable } from '../../../components/states';
+import { logoUri, useTenant } from '../../../api/tenant';
 
 // ---------- School settings ----------
 
 type Profile = { name: string; short: string; color: string; grFormat: string; voucherFormat: string; receiptFormat: string };
 
 const PROFILE: Profile = {
-  name: 'Bright Future School',
-  short: 'BFS',
+  name: '',
+  short: '',
   color: 'Orange',
   grFormat: 'GR-{CAMPUS}-{0000}',
   voucherFormat: 'V-{YY}-{000000}',
@@ -68,6 +67,7 @@ export function AdminSettings(_: ScreenProps) {
   const [r, setR] = useState<SchoolRules>(rules);
   const [tab, setTab] = useState('Profile');
   const ctx = useApi('adm:context', webA.context);
+  const logo = logoUri(useTenant());
   const loaded = useRef(false);
   const lastChains = useRef('');
   const saver = useMutation(webA.saveSettings);
@@ -175,7 +175,7 @@ export function AdminSettings(_: ScreenProps) {
             <View style={s.gap} />
             <Text style={a.bold}>Logo</Text>
             <View style={a.row}>
-              <Placeholder icon={ImageIcon} label="logo.png" height={64} style={s.logo} />
+              {logo ? <Image source={{ uri: logo }} style={s.logoImg} /> : <Placeholder icon={ImageIcon} label="No logo" height={64} style={s.logo} />}
               <Button label="Change logo" variant="outline" onPress={() => toast('Logo upload is done on the web panel (no app API yet)')} />
             </View>
             <View style={s.gap} />
@@ -190,13 +190,13 @@ export function AdminSettings(_: ScreenProps) {
           </Card>
           <Card title="Number formats">
             <Field label="GR No." value={p.grFormat} onChangeText={v => setP(x => ({ ...x, grFormat: v }))} />
-            <Text style={a.small}>Next: {preview(p.grFormat, 2381)}</Text>
+            <Text style={a.small}>Example: {preview(p.grFormat, 1)}</Text>
             <View style={s.gap} />
             <Field label="Voucher No." value={p.voucherFormat} onChangeText={v => setP(x => ({ ...x, voucherFormat: v }))} />
-            <Text style={a.small}>Next: {preview(p.voucherFormat, 419)}</Text>
+            <Text style={a.small}>Example: {preview(p.voucherFormat, 1)}</Text>
             <View style={s.gap} />
             <Field label="Receipt No." value={p.receiptFormat} onChangeText={v => setP(x => ({ ...x, receiptFormat: v }))} />
-            <Text style={a.small}>Next: {preview(p.receiptFormat, 612)}</Text>
+            <Text style={a.small}>Example: {preview(p.receiptFormat, 1)}</Text>
           </Card>
           <Button label="Save profile and formats" onPress={saveProfile} loading={saver.busy} />
         </>
@@ -258,186 +258,49 @@ function RuleToggle({ label, value, onChange, last }: { label: string; value: bo
 
 // ---------- Templates ----------
 
-export const useTemplates = () => useShared<TemplateDef[]>('admin.templates', TEMPLATES);
-
-const SAMPLE: Record<string, string> = {
-  student_name: 'Ayesha Khan',
-  gr_no: 'GR-MC-0012',
-  class: 'Class 5-A',
-  amount: 'Rs. 9,375',
-  due_date: '10 Nov',
-  voucher_no: 'V-26-000418',
-  receipt_no: 'R-26-000611',
-  mode: 'JazzCash',
-  term: 'Mid-term 2026',
-  total: '432 / 500',
-  percentage: '86.4',
-  grade: 'A',
-  position: '2nd in section',
-  qr: 'RC-26-AK0012',
-  from: 'Apr 2019',
-  to: 'Mar 2027',
-  serial: 'LC-26-0041',
-  valid_till: '31 Mar 2027',
-  photo: '[photo]',
-  date: '22 Oct',
-  school: 'Bright Future School',
-};
-
-const fill = (text: string) => text.replace(/\{(\w+)\}/g, (m, k: string) => SAMPLE[k] ?? m);
-
 export function AdminTemplates(_: ScreenProps) {
-  const nav = useNav();
-  const [list] = useTemplates();
   return (
-    <ListScreen
-      title="Templates"
-      subtitle="Voucher, receipt, report card, certificate, ID card, messages"
-      items={list}
-      keyOf={t => t.id}
-      searchText={t => `${t.name} ${t.kind}`}
-      filters={[{ label: 'Kind', options: ['All', 'Voucher', 'Receipt', 'Report card', 'Certificate', 'ID card', 'Message'], get: t => t.kind }]}
-      header={
-        <>
-          <ReadOnlyBanner />
-          <NoApiBanner what="Templates" />
-        </>
-      }
-      renderItem={(t, last) => (
-        <ListRow
-          icon={MessageSquare}
-          title={t.name}
-          subtitle={`${t.kind} · English + Urdu · updated ${t.updated}`}
-          onPress={() => nav.push('AdminTemplateEdit', { id: t.id })}
-          chevron
-          last={last}
-        />
-      )}
-    />
+    <Screen title="Templates" subtitle="Voucher, receipt, report card, certificate, ID card, messages">
+      <NotAvailable
+        what="Templates"
+        detail="Voucher, receipt, report card, certificate, ID card and message templates cannot be read or saved through the school server yet."
+      />
+    </Screen>
   );
 }
 
 export function AdminTemplateEdit(_: ScreenProps) {
-  const [list, setList] = useTemplates();
-  const id = useParam('id', list[0].id);
-  const t = list.find(x => x.id === id) ?? list[0];
-  const { guard } = useGuard();
-  const [lang, setLang] = useState('English');
-  const [en, setEn] = useState(t.en);
-  const [ur, setUr] = useState(t.ur);
-  const text = lang === 'English' ? en : ur;
-  const setText = lang === 'English' ? setEn : setUr;
-  const save = guard(() => {
-    if (!en.trim() || !ur.trim()) {
-      toast('Both English and Urdu text are required');
-      return;
-    }
-    setList(l => l.map(x => (x.id === t.id ? { ...x, en, ur, updated: 'Today' } : x)));
-    logAudit('Templates', `${t.name} updated`);
-    toast('Template saved');
-  });
   return (
-    <Screen title={t.name} subtitle={t.kind} footer={<Button label="Save template" onPress={save} />}>
-      <ReadOnlyBanner />
-      <Segmented options={['English', 'Urdu']} value={lang} onChange={setLang} />
-      <Field label={`${lang} text`} value={text} onChangeText={setText} multiline />
-      <Text style={a.bold}>Insert variable</Text>
-      <View style={a.rowWrap}>
-        {t.variables.map(v => (
-          <Pressable key={v} onPress={() => setText(`${text}{${v}}`)} style={s.var}>
-            <Text style={s.varText}>{`{${v}}`}</Text>
-          </Pressable>
-        ))}
-      </View>
-      <Card title="Preview with sample data">
-        <Text style={[s.preview, lang === 'Urdu' && s.rtl]}>{fill(text)}</Text>
-      </Card>
-      <Button label="Download sample PDF" variant="outline" onPress={() => toast('Sample PDF ready (demo)')} />
+    <Screen title="Template">
+      <NotAvailable what="Template editor" />
     </Screen>
   );
 }
 
 // ---------- Integrations ----------
 
-export const useIntegrations = () => useShared<Integration[]>('admin.integrations', INTEGRATIONS);
-
 export function AdminIntegrations(_: ScreenProps) {
-  const nav = useNav();
-  const [list] = useIntegrations();
   const gw = useApi('adm:outbox-status', webA.outboxStatus);
   return (
-    <ListScreen
-      title="Integrations"
-      subtitle="SMS, WhatsApp, email, payment gateway, biometric"
-      items={list}
-      keyOf={i => i.id}
-      searchText={i => `${i.name} ${i.kind}`}
-      filters={[{ label: 'Kind', options: ['All', 'SMS', 'WhatsApp', 'Email', 'Payment gateway', 'Biometric'], get: i => i.kind }]}
-      header={
-        <>
-          <ReadOnlyBanner />
-          <Card title="Gateway status (server)">
-            {gw.error ? <InfoBanner tone="danger" text={gw.error} /> : null}
-            <KV k="SMS" v={gw.data ? (gw.data.sms ? `On · ${gw.data.smsProvider ?? ''}` : 'Not set up') : '…'} />
-            <KV k="WhatsApp" v={gw.data ? (gw.data.whatsapp ? `On · ${gw.data.whatsappProvider ?? ''}` : 'Not set up') : '…'} last />
-          </Card>
-          <NoApiBanner what="Gateway keys, payment gateway and biometric settings" />
-        </>
-      }
-      renderItem={(i, last) => (
-        <ListRow
-          icon={Plug}
-          title={i.name}
-          subtitle={i.kind}
-          right={<Badge label={i.enabled ? 'On' : 'Off'} tone={i.enabled ? 'success' : 'neutral'} />}
-          onPress={() => nav.push('AdminIntegrationDetail', { id: i.id })}
-          last={last}
-        />
-      )}
-    />
+    <Screen title="Integrations" subtitle="SMS, WhatsApp, email, payment gateway, biometric" refreshing={gw.refreshing} onRefresh={gw.refresh}>
+      <ReadOnlyBanner />
+      <Card title="Message gateways (server)">
+        {gw.error ? <InfoBanner tone="danger" text={gw.error} /> : null}
+        <KV k="SMS" v={gw.data ? (gw.data.sms ? `On · ${gw.data.smsProvider ?? ''}` : 'Not set up') : '…'} />
+        <KV k="WhatsApp" v={gw.data ? (gw.data.whatsapp ? `On · ${gw.data.whatsappProvider ?? ''}` : 'Not set up') : '…'} last />
+      </Card>
+      <NotAvailable
+        what="Gateway keys, email, payment gateway and biometric settings"
+        detail="These are set up on the school server by the platform administrator; the app cannot read or change them yet."
+      />
+    </Screen>
   );
 }
 
 export function AdminIntegrationDetail(_: ScreenProps) {
-  const [list, setList] = useIntegrations();
-  const id = useParam('id', list[0].id);
-  const it = list.find(x => x.id === id) ?? list[0];
-  const { guard } = useGuard();
-  const [f, setF] = useState(it);
-  const [testing, setTesting] = useState(false);
-  const test = () => {
-    if (f.fields.some(x => !x.value.trim())) {
-      toast('Fill every field before testing');
-      return;
-    }
-    setTesting(true);
-    setTimeout(() => {
-      setTesting(false);
-      toast(`${f.name}: connection OK (demo)`);
-    }, 800);
-  };
-  const save = guard(() => {
-    setList(l => l.map(x => (x.id === f.id ? f : x)));
-    logAudit('Integrations', `${f.name} saved · ${f.enabled ? 'enabled' : 'disabled'}`);
-    toast('Integration saved');
-  });
   return (
-    <Screen title={f.name} subtitle={f.kind} footer={<Button label="Save" onPress={save} />}>
-      <ReadOnlyBanner />
-      <Card>
-        <ListRow title="Enabled" right={<Toggle value={f.enabled} onChange={v => setF(x => ({ ...x, enabled: v }))} />} last />
-      </Card>
-      {f.fields.map((fl, i) => (
-        <Field
-          key={fl.label}
-          label={fl.label}
-          value={fl.value}
-          secureTextEntry={fl.secret}
-          onChangeText={v => setF(x => ({ ...x, fields: x.fields.map((y, j) => (j === i ? { ...y, value: v } : y)) }))}
-        />
-      ))}
-      <Button label="Test connection" variant="outline" loading={testing} onPress={test} />
-      <InfoBanner text="Keys are stored encrypted on the server and never shown in full." />
+    <Screen title="Integration">
+      <NotAvailable what="Integration settings" />
     </Screen>
   );
 }
@@ -445,6 +308,7 @@ export function AdminIntegrationDetail(_: ScreenProps) {
 const s = StyleSheet.create({
   gap: { height: 10 },
   logo: { width: 90 },
+  logoImg: { width: 64, height: 64, borderRadius: 12 },
   swatch: { paddingHorizontal: 12, paddingVertical: 9, borderRadius: radius.sm, borderWidth: 2, borderColor: 'transparent' },
   swatchOn: { borderColor: colors.text },
   swatchText: { color: colors.white, fontWeight: '800', fontSize: 12 },

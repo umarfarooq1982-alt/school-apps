@@ -7,10 +7,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
-  GraduationCap,
-  Layers,
   MessageCircle,
-  Paperclip,
   Pencil,
   Phone,
   Plus,
@@ -28,7 +25,6 @@ import {
   HeroCard,
   HStack,
   IconButton,
-  IconType,
   InfoBanner,
   ListRow,
   ProgressBar,
@@ -38,13 +34,12 @@ import {
   toast,
   Toggle,
 } from '../../components/ui';
-import { Empty, NoApiBanner, QueryView } from '../../components/states';
+import { Empty, NoApiBanner, NotAvailable, QueryView } from '../../components/states';
 import { colors } from '../../theme';
 import { useNav } from '../../navigation';
 import { useI18n } from '../../i18n';
 import { useApi, useMutation } from '../../api/hooks';
 import { LeaveDto, RecordDto, teacherApi } from '../../api/mobile';
-import { REPORTS } from '../../data/teacher';
 import {
   addDays,
   cap,
@@ -483,15 +478,6 @@ export function TeacherNotices() {
   );
 }
 
-const REPORT_ICON: Record<string, IconType> = {
-  check: Check,
-  alert: TriangleAlert,
-  clip: Paperclip,
-  pencil: Pencil,
-  cap: GraduationCap,
-  layers: Layers,
-};
-
 // T26: class reports. Only class strength comes from the server.
 export function TeacherReports() {
   const q = useApi('teacher.reports.strength', () => teacherApi.reports('strength'));
@@ -520,20 +506,10 @@ export function TeacherReports() {
           </Card>
         )}
       </QueryView>
-      <NoApiBanner what="Attendance, homework, marks, result and syllabus reports" />
-      <Card>
-        {REPORTS.map((r, i) => (
-          <ListRow
-            key={r.id}
-            icon={REPORT_ICON[r.icon]}
-            title={r.title}
-            subtitle={r.sub}
-            right={<Badge label="PDF · Excel" tone="neutral" />}
-            onPress={() => toast(`${r.title}: not available from the server yet`)}
-            last={i === REPORTS.length - 1}
-          />
-        ))}
-      </Card>
+      <NotAvailable
+        what="Attendance, homework, marks, result and syllabus reports"
+        detail="Only the class strength report is available from the school server so far."
+      />
       <InfoBanner text="You see reports only for your own classes and subjects." />
     </Screen>
   );

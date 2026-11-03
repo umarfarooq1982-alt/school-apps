@@ -55,7 +55,7 @@ export function AdminVehiclesLive(_: ScreenProps) {
         return { plate: v.plate.trim().toUpperCase(), type: v.type || null, capacity: Number(v.capacity), driverName: v.driverName?.trim(), driverPhone: v.driverPhone?.trim() };
       }}
       addLabel="Add vehicle"
-      toolsRoute="AdminVehiclesTools"
+     
       renderHeader={rows => (
         <>
           <KpiGrid>
@@ -93,7 +93,7 @@ export function AdminRoutesLive(_: ScreenProps) {
         return { name: v.name.trim(), vehicleId: veh?.id ?? null, fare: Number(v.fare) };
       }}
       addLabel="Add route"
-      toolsRoute="AdminRoutesTools"
+     
       renderHeader={() => <InfoBanner text="Stop order and pick-up / drop timings are on the tools screen (no API yet)." />}
     />
   );
@@ -124,7 +124,7 @@ export function AdminTransportAttendanceLive(_: ScreenProps) {
           : 'Pick a route'
       }
       addLabel="Log trip"
-      toolsRoute="AdminTransportAttendanceTools"
+     
     />
   );
 }
@@ -171,7 +171,7 @@ export function AdminFuelMaintenanceLive(_: ScreenProps) {
         };
       }}
       addLabel="Add log"
-      toolsRoute="AdminFuelMaintenanceTools"
+     
       renderHeader={rows => {
         const by: Record<string, number> = {};
         rows.forEach(r => {
@@ -276,8 +276,8 @@ export function AdminTransportAssignLive(_: ScreenProps) {
       title="Student assignment"
       subtitle="Route and stop per student, with seat check"
       q={q}
-      toolsRoute="AdminTransportAssignTools"
-      toolsLabel="Transport fee on vouchers (sample)"
+     
+     
       exportTitle="Transport students"
     >
       <QueryView q={routes} isEmpty={d => !d.length} emptyText="Add a route first (Routes & stops).">

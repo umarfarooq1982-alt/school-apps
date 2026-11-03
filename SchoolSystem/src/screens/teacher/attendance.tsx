@@ -20,7 +20,7 @@ import {
   Toggle,
 } from '../../components/ui';
 import { BottomSheet } from '../../components/Tabs';
-import { Empty, NoApiBanner, QueryView } from '../../components/states';
+import { Empty, NotAvailable, QueryView } from '../../components/states';
 import { colors } from '../../theme';
 import { useNav } from '../../navigation';
 import { useShared } from '../../store';
@@ -385,45 +385,14 @@ export function TeacherOfflineAttendance() {
   );
 }
 
-const PERIODS = ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8'];
-
-// T07: the server has no per-period attendance API yet, so this stays on the phone.
+// T07: the server has no per-period attendance API yet, so nothing is shown or
+// saved here (no local-only marks that never reach the school).
 function PeriodAttendanceBody() {
-  const [period, setPeriod] = useState(PERIODS[0]);
-  const date = isoDate();
-  const { current } = useMyClasses();
-  const roster = useRoster(current, date);
-  const [all, setAll] = useShared<Record<string, Marks>>('teacher.periodAtt', {});
-  const students = roster.data?.students || [];
-  const marks: Marks = all[`${current?.key}.${period}`] || {};
-  const set = (id: string, m: Mark) =>
-    setAll(prev => ({ ...prev, [`${current?.key}.${period}`]: { ...marks, [id]: m } }));
-  const absent = students.filter(st => marks[st.id] === 'A').length;
   return (
-    <>
-      <NoApiBanner what="Period attendance" />
-      <Text style={s.rowSub}>
-        {current?.label} · {period}
-      </Text>
-      <Chips options={PERIODS} value={period} onChange={setPeriod} />
-      <QueryView q={roster} isEmpty={d => d.students.length === 0} emptyText="No active students in this class.">
-        {() => (
-          <Card>
-            {students.map((st, i) => (
-              <StudentMarkRow
-                key={st.id}
-                student={st}
-                avatar={false}
-                value={marks[st.id] ?? 'P'}
-                onChange={m => set(st.id, m)}
-                last={i === students.length - 1}
-              />
-            ))}
-          </Card>
-        )}
-      </QueryView>
-      <Button label="Save period attendance" onPress={() => toast(`${period} saved on this phone · ${absent} absent`)} />
-    </>
+    <NotAvailable
+      what="Period attendance"
+      detail="Period-wise attendance is not available from the school server yet. Use daily attendance for now."
+    />
   );
 }
 

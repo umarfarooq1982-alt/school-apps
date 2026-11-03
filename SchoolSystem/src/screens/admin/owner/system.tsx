@@ -7,10 +7,10 @@ import { adminStyles as a, ListScreen, useReasonPrompt } from '../../../componen
 import { ScreenProps } from '../../../navigation';
 import { useShared } from '../../../store';
 import { logAudit, useStaffRole } from '../../../data/admin';
-import { Backup, BACKUPS } from '../../../data/admin-owner';
+import { Backup } from '../../../data/admin-owner';
 import { useApi, useMutation } from '../../../api/hooks';
 import { AuditRow, webA } from '../../../api/webA';
-import { NoApiBanner } from '../../../components/states';
+import { NotAvailable } from '../../../components/states';
 
 const when = (iso: string) =>
   new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -88,7 +88,7 @@ export function AdminAuditLog(_: ScreenProps) {
 type LiveBackup = Backup & { records?: unknown[] };
 
 export function AdminBackup(_: ScreenProps) {
-  const [list, setList] = useShared<LiveBackup[]>('admin.backups', BACKUPS);
+  const [list, setList] = useShared<LiveBackup[]>('admin.backups.live', []);
   const [role] = useStaffRole();
   const [prompt, ask] = useReasonPrompt();
   const isOwner = role === 'owner';
@@ -109,7 +109,7 @@ export function AdminBackup(_: ScreenProps) {
           when: when(res.exportedAt),
           size: `${c.students ?? 0} students · ${c.staff ?? 0} staff · ${c.vouchers ?? 0} vouchers · ${c.records ?? 0} records`,
           kind: 'Manual',
-          expires: 'in 30 days',
+          expires: '',
           records: payload.records ?? [],
         },
         ...l,
@@ -136,15 +136,15 @@ export function AdminBackup(_: ScreenProps) {
     <>
       <ListScreen
         title="Backup & restore"
-        subtitle="Daily automatic backups kept 30 days"
+        subtitle="Backups taken from this app in this session"
         items={list}
         keyOf={b => b.id}
         searchText={b => `${b.when} ${b.kind}`}
         filters={[{ label: 'Kind', options: ['All', 'Automatic', 'Manual'], get: b => b.kind }]}
         header={
           <>
-            <InfoBanner icon={DatabaseBackup} text="A backup runs every night at 2:00 AM and is kept for 30 days. Only the Owner can restore." />
-            <NoApiBanner what="The nightly backup list (the server only makes a backup on request)" />
+            <InfoBanner icon={DatabaseBackup} text="Only the Owner can take or restore a backup." />
+            <NotAvailable what="Scheduled backup list" detail="The school server makes a backup only on request, so older backups are not listed here." />
             <Button label="Back up now" icon={DatabaseBackup} loading={backup.busy} onPress={backupNow} />
           </>
         }
@@ -152,7 +152,7 @@ export function AdminBackup(_: ScreenProps) {
           <ListRow
             icon={DatabaseBackup}
             title={b.when}
-            subtitle={`${b.kind} · ${b.size} · expires ${b.expires}`}
+            subtitle={`${b.kind} · ${b.size}`}
             right={
               <View style={a.row}>
                 <IconButton icon={Download} onPress={() => { logAudit('Backup', `Downloaded backup ${b.when}`); toast('Download the backup file from the web panel (no app API).'); }} />

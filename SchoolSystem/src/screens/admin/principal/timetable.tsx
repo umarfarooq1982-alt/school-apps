@@ -2,13 +2,11 @@
 // substitutions (approved staff leave + "substitutions" module records).
 import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Bell, CalendarRange, History, Minus, Plus, Repeat, Send, UserX } from 'lucide-react-native';
+import { Bell, CalendarRange, History, Repeat, Send, UserX } from 'lucide-react-native';
 import {
   Badge,
   Button,
   Card,
-  Field,
-  IconButton,
   InfoBanner,
   ListRow,
   Screen,
@@ -19,11 +17,11 @@ import { adminStyles as a, FormSheet, ListScreen, PickerField, Table } from '../
 import { ScreenProps, useNav } from '../../../navigation';
 import { useShared } from '../../../store';
 import { logAudit } from '../../../data/admin';
-import { ALLOCATION, BELL_SCHEDULES, BellPeriod, WORKLOAD_LIMIT } from '../../../data/admin-principal';
+import { WORKLOAD_LIMIT } from '../../../data/admin-principal';
 import { useApi, useMutation } from '../../../api/hooks';
 import { field, ModuleRow, webA, WebTimetable } from '../../../api/webA';
 import { errorMessage } from '../../../api/client';
-import { Loading, NoApiBanner, QueryView } from '../../../components/states';
+import { Loading, NotAvailable, QueryView } from '../../../components/states';
 import { colors, radius } from '../../../theme';
 import { ReadOnlyBanner, useGuard } from '../owner/shared';
 
@@ -163,88 +161,38 @@ function Builder() {
 }
 
 function Bells() {
-  const [bells, setBells] = useShared<Record<string, BellPeriod[]>>('admin.bells', BELL_SCHEDULES);
-  const { guard, ro } = useGuard();
-  const [which, setWhich] = useState('Normal');
-  const list = bells[which] ?? [];
-  const update = (i: number, time: string) =>
-    ro ? toast('This session is closed and read-only.') : setBells(b => ({ ...b, [which]: b[which].map((p, j) => (j === i ? { ...p, time } : p)) }));
   return (
-    <>
-      <NoApiBanner what="Bell schedules" />
-      <Segmented options={Object.keys(bells)} value={which} onChange={setWhich} />
-      <Card>
-        {list.map((p, i) => (
-          <View key={`${which}-${p.label}`} style={[a.row, s.bellRow]}>
-            <Text style={[s.bellLabel, p.isBreak && s.bellBreak]}>{p.label}</Text>
-            <View style={a.flex}>
-              <Field value={p.time} onChangeText={v => update(i, v)} />
-            </View>
-          </View>
-        ))}
-      </Card>
-      <Button
-        label="Add period"
-        variant="outline"
-        icon={Plus}
-        onPress={guard(() => setBells(b => ({ ...b, [which]: [...b[which], { label: `P${b[which].filter(x => !x.isBreak).length + 1}`, time: '12:20 – 1:00' }] })))}
-      />
-      <Button label="Save bell schedule" onPress={guard(() => { logAudit('Bell schedule', `${which} schedule saved (${list.length} rows)`); toast('Bell schedule saved on this phone'); })} />
-    </>
+    <NotAvailable
+      what="Bell schedules"
+      detail="Period timings are not stored on the school server yet. The live timetable uses the periods set on the web panel."
+    />
   );
 }
 
 function Allocation() {
-  const [alloc, setAlloc] = useShared<Record<string, number>>('admin.allocation', ALLOCATION);
   const { list, cur, setLabel } = useClassPick();
   const q = useClassTimetable(cur);
-  const { guard } = useGuard();
   const tt = q.data;
   const subjects = tt?.subjects.map(x => x.name) ?? [];
   const placed = (name: string) => {
     const id = tt?.subjects.find(x => x.name === name)?.id;
     return (tt?.slots ?? []).filter(x => x.subjectId === id).length;
   };
-  const week = (tt?.days.length ?? 5) * (tt?.periods.length ?? 8);
-  const total = subjects.reduce((n, x) => n + (alloc[x] ?? 0), 0);
-  const change = (subj: string, by: number) =>
-    guard(() => {
-      setAlloc(al => ({ ...al, [subj]: Math.max(0, (al[subj] ?? 0) + by) }));
-      logAudit('Period allocation', `${subj}: ${alloc[subj] ?? 0} → ${Math.max(0, (alloc[subj] ?? 0) + by)} per week`);
-    })();
+  const total = subjects.reduce((n, x) => n + placed(x), 0);
   return (
     <>
-      <NoApiBanner what="Periods per week per subject (the count in the timetable is live)" />
       {cur ? <PickerField label="Class" value={cur.label} options={list.map(c => c.label)} onChange={setLabel} /> : null}
-      <Card title={`Periods per week · ${total} of ${week}`}>
+      <Card title={`Periods per week in the timetable · ${total}`}>
         {subjects.length === 0 ? <Text style={a.small}>{q.loading ? 'Loading…' : 'No subjects yet.'}</Text> : null}
-        {subjects.map((subj, i) => {
-          const got = placed(subj);
-          const want = alloc[subj] ?? 0;
-          return (
-            <ListRow
-              key={subj}
-              title={subj}
-              subtitle={`In timetable: ${got}`}
-              right={
-                <View style={a.row}>
-                  {got !== want ? <Badge label={got > want ? `+${got - want}` : `${got - want}`} tone="warn" /> : <Badge label="OK" tone="success" />}
-                  <IconButton icon={Minus} onPress={() => change(subj, -1)} />
-                  <Text style={a.bold}>{want}</Text>
-                  <IconButton icon={Plus} onPress={() => change(subj, 1)} />
-                </View>
-              }
-              last={i === subjects.length - 1}
-            />
-          );
-        })}
+        {subjects.map((subj, i) => (
+          <ListRow key={subj} title={subj} right={<Text style={a.bold}>{placed(subj)}</Text>} last={i === subjects.length - 1} />
+        ))}
       </Card>
-      {total > week ? <InfoBanner tone="danger" text="More periods allocated than the week has." /> : null}
+      <NotAvailable what="Target periods per subject" detail="The school server does not store a target per subject yet, so only the live count is shown." />
     </>
   );
 }
 
-// Loads every class timetable once and counts each teacher's periods.
 function Workload() {
   const list = useClassSections();
   const q = useApi(list.length ? `adm:tt:all:${list.length}` : null, async () => {
@@ -418,7 +366,4 @@ const s = StyleSheet.create({
   },
   ttSub: { fontSize: 11, fontWeight: '800', color: colors.text },
   ttTeacher: { fontSize: 9.5, color: colors.textMuted },
-  bellRow: { marginBottom: 6 },
-  bellLabel: { width: 52, fontWeight: '800', color: colors.text },
-  bellBreak: { color: colors.primaryText },
 });

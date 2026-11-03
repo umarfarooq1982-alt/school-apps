@@ -38,7 +38,7 @@ export function AdminItemsLive(_: ScreenProps) {
       ]}
       toBody={v => (Number(v.stock || 0) < 0 ? 'Stock cannot be below zero' : { name: v.name.trim(), sku: v.sku?.trim() || null, stock: Number(v.stock || 0), reorderLevel: Number(v.reorderLevel || 0), unit: v.unit || 'pcs' })}
       addLabel="Add item"
-      toolsRoute="AdminItemsTools"
+     
       renderHeader={rows => (
         <KpiGrid>
           <Kpi label="Items" value={String(rows.length)} />
@@ -55,7 +55,6 @@ function recordScreen(opts: {
   subtitle: string;
   icon: typeof Package;
   partyLabel: string;
-  tools: string;
   addLabel: string;
 }) {
   return function RecordsLive(_: ScreenProps) {
@@ -97,10 +96,9 @@ function recordScreen(opts: {
           return { title: v.party.trim(), item: v.item || null, qty, amount: Number(v.amount), payment: v.payment || undefined, date: v.date || todayIso(), status: opts.key === 'purchases' ? 'ordered' : 'done' };
         }}
         addLabel={opts.addLabel}
-        toolsRoute={opts.tools}
         renderHeader={() =>
           opts.key === 'purchases' ? (
-            <InfoBanner text="Goods received do not update stock on the server yet; stock changes are on the Stock tools screen." />
+            <InfoBanner text="Goods received do not update stock on the server yet." />
           ) : opts.key === 'sales' ? (
             <InfoBanner text="'Add to fee voucher' is recorded here; the server does not add it to the voucher yet." />
           ) : null
@@ -110,8 +108,8 @@ function recordScreen(opts: {
   };
 }
 
-export const AdminPurchasesLive = recordScreen({ key: 'purchases', title: 'Purchases', subtitle: 'Purchase orders and goods received', icon: Truck, partyLabel: 'Supplier', tools: 'AdminPurchasesTools', addLabel: 'New purchase order' });
-export const AdminSalesLive = recordScreen({ key: 'sales', title: 'Sales', subtitle: 'Uniform and book sales', icon: ShoppingCart, partyLabel: 'Student / buyer', tools: 'AdminSalesTools', addLabel: 'New sale' });
+export const AdminPurchasesLive = recordScreen({ key: 'purchases', title: 'Purchases', subtitle: 'Purchase orders and goods received', icon: Truck, partyLabel: 'Supplier', addLabel: 'New purchase order' });
+export const AdminSalesLive = recordScreen({ key: 'sales', title: 'Sales', subtitle: 'Uniform and book sales', icon: ShoppingCart, partyLabel: 'Student / buyer', addLabel: 'New sale' });
 
 export function AdminAssetsLive(_: ScreenProps) {
   return (
@@ -133,7 +131,7 @@ export function AdminAssetsLive(_: ScreenProps) {
       ]}
       toBody={v => ({ name: v.name.trim(), title: v.name.trim(), tag: v.tag?.trim(), location: v.location.trim(), condition: v.condition || 'good', status: v.condition || 'good', value: Number(v.value || 0) })}
       addLabel="Add asset"
-      toolsRoute="AdminAssetsTools"
+     
     />
   );
 }
@@ -205,8 +203,8 @@ export function AdminLibraryLive(_: ScreenProps) {
       title="Library"
       subtitle={`Catalog, issue/return and fines · limit ${rules.libraryIssueLimit} per member`}
       q={tab === 'Catalog' ? books : issues}
-      toolsRoute="AdminLibraryTools"
-      toolsLabel="Barcode labels, renewals & member view (sample)"
+     
+     
       exportTitle="Library"
       footer={
         <View style={ls.wrap}>

@@ -255,6 +255,8 @@ export function AdminRoles(_: ScreenProps) {
   const nav = useNav();
   const [roles, setRoles] = useRoleDefs();
   const [, setMatrix] = useMatrix();
+  const users = useApi('adm:users', webA.users);
+  const countOf = (r: RoleDef) => (users.data ? users.data.filter(u => u.role === (r.base ?? r.id)).length : null);
   const { guard } = useGuard();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
@@ -291,7 +293,7 @@ export function AdminRoles(_: ScreenProps) {
           <ListRow
             icon={UserCog}
             title={r.name}
-            subtitle={`${r.users} users · tap to edit permissions`}
+            subtitle={`${r.custom ? 'Custom role' : countOf(r) === null ? '…' : `${countOf(r)} users`} · tap to edit permissions`}
             right={<Badge label={r.custom ? 'Custom' : 'Built-in'} tone={r.custom ? 'info' : 'neutral'} />}
             onPress={() => nav.push('AdminRoleEditor', { id: r.id })}
             last={last}

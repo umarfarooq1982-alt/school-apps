@@ -6,7 +6,6 @@ import { useApi } from '../api/hooks';
 import { ModuleRow, field, webA } from '../api/webA';
 import { useLiveStudents } from './admin-frontdesk';
 import { useModuleList } from '../screens/admin/owner/shared';
-import { ADMIN_STAFF, ADMIN_STUDENTS } from './admin';
 
 // ---------- Setup ----------
 
@@ -15,8 +14,8 @@ export type GradeBand = { min: number; grade: string; remark: string };
 export type PassRules = { overallPct: number; subjectPct: number; maxFailSubjects: number };
 
 export const EXAM_TYPES_SEED: ExamType[] = [
-  { name: 'Mid-term', weight: 40, window: '12 – 20 Oct' },
-  { name: 'Final term', weight: 60, window: '1 – 12 Dec' },
+  { name: 'Mid-term', weight: 40, window: '' },
+  { name: 'Final term', weight: 60, window: '' },
 ];
 
 export const GRADING_SEED: GradeBand[] = [
@@ -136,64 +135,10 @@ export function subjectAverages(students: StudentMarks[], subjects: SubjectMax[]
   });
 }
 
-// ---------- Dummy class (Class 5, sections A and B) ----------
-
-export const RESULT_SUBJECTS: SubjectMax[] = [
-  { name: 'English', max: 100 },
-  { name: 'Mathematics', max: 100 },
-  { name: 'Urdu', max: 100 },
-  { name: 'Science', max: 100 },
-  { name: 'Islamiat', max: 100 },
-];
-
-export const RESULT_CLASSES = ['Class 5', 'Class 6', 'Class 7'];
-export const TERMS = ['Mid-term', 'Final term'];
-
-function classStudents(cls: string) {
-  const offset = RESULT_CLASSES.indexOf(cls) * 24;
-  return ADMIN_STUDENTS.slice(offset, offset + 24).map((s, i) => ({
-    id: s.id,
-    name: s.name,
-    section: i % 2 ? 'B' : 'A',
-  }));
-}
-
-// Deterministic marks; term changes them a little. A couple of students fail
-// a subject and one is absent so every rule is exercised.
-export function classMarks(cls: string, term: string): StudentMarks[] {
-  const t = TERMS.indexOf(term) + 1;
-  return classStudents(cls).map((s, i) => {
-    const marks: Record<string, MarkValue> = {};
-    RESULT_SUBJECTS.forEach((sub, j) => {
-      const base = 55 + ((i * 37 + j * 23 + t * 11 + cls.length * 7) % 44);
-      marks[sub.name] = Math.min(100, base);
-    });
-    if (i === 7) {
-      marks.Mathematics = 28;
-    }
-    if (i === 13) {
-      marks.Science = 'Abs';
-    }
-    if (i === 19) {
-      Object.keys(marks).forEach(k => {
-        marks[k] = 30 + (k.length % 5);
-      });
-    }
-    // Two students with equal totals to show shared positions.
-    if (i === 3 || i === 5) {
-      RESULT_SUBJECTS.forEach((sub, j) => {
-        marks[sub.name] = 80 + j;
-      });
-    }
-    return { ...s, marks };
-  });
-}
-
 // ---------- Date sheet, invigilation, seating ----------
 
 export type Paper = { id: string; examId: string; cls: string; subject: string; date: string; time: string };
 
-export const DATES = ['Mon 1 Dec', 'Tue 2 Dec', 'Wed 3 Dec', 'Thu 4 Dec', 'Fri 5 Dec', 'Mon 8 Dec'];
 export const TIMES = ['8:30 – 11:00', '11:30 – 1:30'];
 
 // ISO dates (Monday to Saturday) from start to end, or the next six school
@@ -224,8 +169,8 @@ export const usePapers = () =>
   );
 export const usePublished = () => useShared<Record<string, boolean>>('exam.published', {});
 
-export const ROOMS = ['Hall A', 'Hall B', 'Room 2', 'Room 4'];
-export const TEACHERS = ADMIN_STAFF.filter(s => s.department === 'Academics' && s.status !== 'Left').map(s => s.name);
+// Default exam room labels; the server has no room list.
+export const ROOMS = ['Hall', 'Room 1', 'Room 2', 'Room 3'];
 
 // Invigilation duties: "invigilation" module records (one per date and room).
 export type Duty = { id: string; date: string; room: string; teacher: string };
@@ -240,28 +185,12 @@ export const useDuties = () =>
 
 export type MarksTask = { id: string; teacher: string; cls: string; subject: string; entered: number; total: number; locked: boolean; deadline: string };
 
-const MARKS_SEED: MarksTask[] = RESULT_CLASSES.flatMap((cls, ci) =>
-  RESULT_SUBJECTS.map((s, si) => {
-    const total = 24;
-    const entered = ci === 0 ? 24 : Math.min(24, ((ci * 7 + si * 9) % 25));
-    return {
-      id: `${cls}-${s.name}`,
-      teacher: si === 0 && ci === 0 ? 'Sadia Anwar' : TEACHERS[(ci * 5 + si) % TEACHERS.length],
-      cls,
-      subject: s.name,
-      entered,
-      total,
-      locked: ci === 0,
-      deadline: '28 Oct',
-    };
-  }),
-);
-export const useMarksTasks = () => useShared<MarksTask[]>('exam.marks', MARKS_SEED);
+export const useMarksTasks = () => useShared<MarksTask[]>('exam.marks', []);
 
 // ---------- Results publish state ----------
 
 export type ResultState = 'Draft' | 'In review' | 'Published';
-export const useResultState = () => useShared<Record<string, ResultState>>('exam.resultState', { 'Class 6|Mid-term': 'Published' });
+export const useResultState = () => useShared<Record<string, ResultState>>('exam.resultState', {});
 
 // ---------- Admit card holds ----------
 

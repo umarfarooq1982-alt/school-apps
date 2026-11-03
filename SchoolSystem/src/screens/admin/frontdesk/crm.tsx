@@ -41,17 +41,14 @@ import {
 import { NoApiBanner, QueryView } from '../../../components/states';
 import { colors, radius } from '../../../theme';
 import { ScreenProps, useNav, useParam } from '../../../navigation';
-import { SECTIONS, campusName, logAudit, useRules, useStaffRole } from '../../../data/admin';
+import { campusName, logAudit, useRules, useStaffRole } from '../../../data/admin';
 import {
-  ADMISSION_FEE,
   Decision,
   FOLLOW_UP_DATES,
-  FRONT_STAFF,
   INQUIRY_STATUSES,
   Inquiry,
   InquirySource,
   InquiryStatus,
-  REG_FEE,
   Registration,
   SOURCES,
   TEST_MAX,
@@ -60,6 +57,7 @@ import {
   meritList,
   siblingsOf,
   testTotal,
+  useFrontStaff,
   useInquiries,
   useLiveClasses,
   useRegistrations,
@@ -91,6 +89,7 @@ export function AdminInquiries(_: ScreenProps) {
   const nav = useNav();
   const { guard } = useGuard();
   const classes = useLiveClasses();
+  const staff = useFrontStaff();
   const [items, setItems, q] = useInquiries();
   const [adding, setAdding] = useState(false);
   const [sel, setSel] = useState<string | null>(null);
@@ -101,7 +100,7 @@ export function AdminInquiries(_: ScreenProps) {
     cls: '',
     source: 'Walk-in' as InquirySource,
     followUp: 'Tomorrow',
-    assigned: FRONT_STAFF[0],
+    assigned: '',
   });
   const selected = items.find(i => i.id === sel);
   const registered = items.filter(i => i.status === 'Registered').length;
@@ -154,7 +153,7 @@ export function AdminInquiries(_: ScreenProps) {
             <Text style={adminStyles.section}>Source</Text>
             <Chips options={SOURCES} value={form.source} onChange={v => setForm(f => ({ ...f, source: v as InquirySource }))} />
             <PickerField label="Follow-up date" value={form.followUp} options={FOLLOW_UP_DATES} onChange={v => setForm(f => ({ ...f, followUp: v }))} />
-            <PickerField label="Assigned to" value={form.assigned} options={FRONT_STAFF} onChange={v => setForm(f => ({ ...f, assigned: v }))} />
+            <PickerField label="Assigned to" value={form.assigned} options={staff} placeholder="Choose staff" onChange={v => setForm(f => ({ ...f, assigned: v }))} />
           </FormSheet>
           <BottomSheet visible={!!selected} onClose={() => setSel(null)}>
             {selected ? (
@@ -181,7 +180,7 @@ export function AdminInquiries(_: ScreenProps) {
                 <PickerField
                   label="Assigned staff"
                   value={selected.assigned}
-                  options={FRONT_STAFF}
+                  options={staff}
                   onChange={guard((v: string) => update(selected.id, { assigned: v }, `${selected.child}: assigned to ${v}`))}
                 />
                 <Button
@@ -234,7 +233,7 @@ export function AdminRegistration(_: ScreenProps) {
   return (
     <ListScreen
       title="Registration"
-      subtitle={`Registration fee ${formatRs(regs[0]?.feeAmount ?? REG_FEE)}`}
+      subtitle={regs[0]?.feeAmount ? `Registration fee ${formatRs(regs[0].feeAmount)}` : `${regs.length} registrations`}
       items={regs}
       keyOf={r => r.regNo}
       searchText={r => `${r.regNo} ${r.name} ${r.father} ${r.fatherCnic} ${r.bForm}`}
@@ -736,6 +735,7 @@ export function AdminEntryTest(_: ScreenProps) {
 export function AdminAdmission(_: ScreenProps) {
   const { guard } = useGuard();
   const { list: regs, q, patchLocal } = useRegistrations();
+  const classes = useLiveClasses();
   const approvalsQ = useApi('adm:approvals', webA.approvals);
   const [rules] = useRules();
   const [role] = useStaffRole();
@@ -766,10 +766,15 @@ export function AdminAdmission(_: ScreenProps) {
   };
 
   const admit = async (r: Registration) => {
-    const a = r.admission ?? { section: 'A', feePaid: false, final: false };
+    const a = r.admission ?? { section: '', feePaid: false, final: false };
+    const section = a.section || classes.sectionsOf(r.cls)[0] || '';
+    if (!section) {
+      toast('Allot a section first');
+      return;
+    }
     setBusy(r.id);
     try {
-      const res = await webA.admit(r.id, a.section || 'A');
+      const res = await webA.admit(r.id, section);
       patchLocal(r.regNo, {
         admission: {
           ...a,
@@ -810,11 +815,12 @@ export function AdminAdmission(_: ScreenProps) {
       <QueryView q={q}>{() => null}</QueryView>
       <Segmented options={['In progress', 'Final']} value={tab} onChange={setTab} />
       {rules.admissionNeedsFee ? (
-        <InfoBanner text={`Admission becomes final only after the admission fee (${formatRs(ADMISSION_FEE)}) is paid.`} />
+        <InfoBanner text="Admission becomes final only after the admission fee is paid." />
       ) : null}
       {list.length === 0 ? <InfoBanner text={tab === 'Final' ? 'No final admissions yet.' : 'No selected candidates waiting. Select candidates in Entry test.'} /> : null}
       {list.map(r => {
-        const a = r.admission ?? { section: 'A', feePaid: false, final: false };
+        const a = r.admission ?? { section: '', feePaid: false, final: false };
+        const sections = classes.sectionsOf(r.cls);
         const approved = r.principal === 'approved';
         const pending = pendingOf(r);
         return (
@@ -846,8 +852,8 @@ export function AdminAdmission(_: ScreenProps) {
 
                 <Step n={2} title="Allot section" done={!!a.section}>
                   <Chips
-                    options={SECTIONS}
-                    value={a.section || 'A'}
+                    options={sections}
+                    value={a.section}
                     onChange={guard((v: string) => {
                       patchLocal(r.regNo, { admission: { ...a, section: v } });
                       logAudit('Admission', `${r.regNo}: section ${v}`);
@@ -855,7 +861,7 @@ export function AdminAdmission(_: ScreenProps) {
                   />
                 </Step>
 
-                <Step n={3} title={`Admission fee ${formatRs(ADMISSION_FEE)}`} done={a.feePaid}>
+                <Step n={3} title="Admission fee" done={a.feePaid}>
                   {a.feePaid ? (
                     <Text style={adminStyles.small}>Paid</Text>
                   ) : (

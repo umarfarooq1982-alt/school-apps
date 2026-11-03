@@ -1,13 +1,13 @@
 // Building blocks for admin screens that read and write the school server.
 import React, { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { Plus, Search, Wrench } from 'lucide-react-native';
-import { Badge, Button, Card, Field, ListRow, Screen, ScreenNoticeContext, toast } from '../../../components/ui';
+import { Plus, Search } from 'lucide-react-native';
+import { Badge, Button, Card, Field, ListRow, Screen, toast } from '../../../components/ui';
 import { ExportButton, FormSheet, PickerField } from '../../../components/admin';
-import { Empty, NoApiBanner, QueryView } from '../../../components/states';
+import { Empty, NotAvailable, QueryView } from '../../../components/states';
 import { Query, useApi, useMutation } from '../../../api/hooks';
 import { ModuleRow, modulesApi } from '../../../api/webB';
-import { useNav } from '../../../navigation';
+import { ScreenProps } from '../../../navigation';
 import { useReadOnly } from '../../../data/admin';
 import { colors } from '../../../theme';
 import type { Tone } from '../../../theme';
@@ -51,15 +51,14 @@ export function StatusBadge({ status }: { status?: string | null }) {
   return <Badge label={label} tone={statusTone(status)} />;
 }
 
-// Screen that shows server data with pull-to-refresh and, when given, a link
-// to the sample-data tools for rules the server does not provide yet.
+// Screen that shows server data with pull-to-refresh. `toolsRoute` and
+// `toolsLabel` are accepted for compatibility but show nothing: the
+// sample-data tools were removed.
 export function LiveScreen({
   title,
   subtitle,
   q,
   children,
-  toolsRoute,
-  toolsLabel = 'More tools (sample data)',
   footer,
   exportTitle,
   right,
@@ -74,7 +73,6 @@ export function LiveScreen({
   exportTitle?: string;
   right?: React.ReactNode;
 }) {
-  const nav = useNav();
   return (
     <Screen
       title={title}
@@ -90,9 +88,6 @@ export function LiveScreen({
       }
     >
       {children}
-      {toolsRoute ? (
-        <Button label={toolsLabel} icon={Wrench} variant="outline" onPress={() => nav.push(toolsRoute)} />
-      ) : null}
     </Screen>
   );
 }
@@ -322,14 +317,14 @@ export function Money({ value, tone }: { value: number; tone?: 'danger' | 'succe
   );
 }
 
-// Wraps a screen that still runs on sample data so it shows the
-// "no API yet" notice at the top of its content.
-export function sampleScreen<P extends object>(Comp: React.ComponentType<P>, what: string): React.ComponentType<P> {
-  const Wrapped = (props: P) => (
-    <ScreenNoticeContext.Provider value={<NoApiBanner what={what} />}>
-      <Comp {...props} />
-    </ScreenNoticeContext.Provider>
+// A screen the school server has no API for yet: title and a clear
+// "not available" card, never sample rows.
+export function notAvailableScreen(title: string, what: string, detail?: string): React.ComponentType<ScreenProps> {
+  const NotAvailableScreen = (_: ScreenProps) => (
+    <Screen title={title}>
+      <NotAvailable what={what} detail={detail} />
+    </Screen>
   );
-  Wrapped.displayName = `Sample(${Comp.displayName || Comp.name || 'Screen'})`;
-  return Wrapped;
+  NotAvailableScreen.displayName = `NotAvailable(${title})`;
+  return NotAvailableScreen;
 }

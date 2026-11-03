@@ -1,4 +1,6 @@
-// Dummy data and shared state for the Owner / Admin app (SOW 3.2).
+// Shared state for the Owner / Admin app (SOW 3.2). Names, campuses, sessions
+// and records shown on screen come from the server; the sample lists below are
+// kept only for screens that have no API and are being retired.
 import { useCallback } from 'react';
 import { getShared, setShared, useShared } from '../store';
 import { getSession, useApiSession } from '../api/session';
@@ -17,23 +19,25 @@ export type StaffRole =
   | 'librarian';
 
 export const STAFF_ROLES: Array<{ key: StaffRole; label: string; user: string }> = [
-  { key: 'owner', label: 'Owner / Super Admin', user: 'Nadeem Akhtar' },
-  { key: 'principal', label: 'Principal', user: 'Dr. Farah Siddiqui' },
-  { key: 'frontdesk', label: 'Front Desk', user: 'Saba Noreen' },
-  { key: 'accounts', label: 'Accounts', user: 'Kamran Yousaf' },
-  { key: 'hr', label: 'HR', user: 'Rabia Aslam' },
-  { key: 'exam', label: 'Exam Controller', user: 'Tariq Mehmood' },
-  { key: 'transport', label: 'Transport Manager', user: 'Waqas Ahmed' },
-  { key: 'store', label: 'Store Keeper', user: 'Javed Iqbal' },
-  { key: 'librarian', label: 'Librarian', user: 'Ayesha Siddiqa' },
+  { key: 'owner', label: 'Owner / Super Admin', user: '' },
+  { key: 'principal', label: 'Principal', user: '' },
+  { key: 'frontdesk', label: 'Front Desk', user: '' },
+  { key: 'accounts', label: 'Accounts', user: '' },
+  { key: 'hr', label: 'HR', user: '' },
+  { key: 'exam', label: 'Exam Controller', user: '' },
+  { key: 'transport', label: 'Transport Manager', user: '' },
+  { key: 'store', label: 'Store Keeper', user: '' },
+  { key: 'librarian', label: 'Librarian', user: '' },
 ];
 
 export function useStaffRole() {
   return useShared<StaffRole>('admin.role', 'owner');
 }
 
+// Role label plus the signed-in user's real name (never a sample name).
 export function roleInfo(role: StaffRole) {
-  return STAFF_ROLES.find(r => r.key === role) ?? STAFF_ROLES[0];
+  const r = STAFF_ROLES.find(x => x.key === role) ?? STAFF_ROLES[0];
+  return { ...r, user: getSession()?.user.name || r.label };
 }
 
 // ---------- Campuses and sessions (S-02, M-01) ----------
@@ -76,7 +80,7 @@ export const SESSIONS: Session[] = [
 ];
 
 export function useAdminSession() {
-  return useShared<string>('admin.session', SESSIONS[0].id);
+  return useShared<string>('admin.session', getSession()?.sessionId ?? '');
 }
 
 // Past sessions are read-only for everyone except the Owner (M-01).
@@ -86,7 +90,7 @@ export function useReadOnly() {
   const [api] = useApiSession();
   // Server sessions first (selected X-Session-Id); sample list as fallback.
   const live = api?.sessions.find(x => x.id === (api.sessionId ?? session));
-  const closed = live ? live.isClosed : SESSIONS.find(x => x.id === session)?.status === 'Closed';
+  const closed = live ? live.isClosed : false;
   return closed && role !== 'owner';
 }
 
@@ -218,7 +222,7 @@ export function campusName(id: string) {
     return 'All campuses';
   }
   const live = getSession()?.campuses.find(c => String(c.id) === String(id));
-  return live?.name ?? CAMPUSES.find(c => c.id === id)?.name ?? id;
+  return live?.name ?? 'Campus';
 }
 
 // ---------- Approvals inbox (shared by every panel) ----------
@@ -247,15 +251,8 @@ export type Approval = {
   note?: string;
 };
 
-const APPROVALS_SEED: Approval[] = [
-  { id: 'ap1', type: 'Admission', title: 'Admission: Rayan Malik, Class 3', sub: 'Entry test 78% · Selected · admission fee paid', by: 'Saba Noreen (Front Desk)', when: 'Today 9:10', status: 'Pending' },
-  { id: 'ap2', type: 'Discount', title: 'Need-based discount 40% · Hafsa Raza', sub: 'Tuition only · Nov 2026 – Mar 2027', by: 'Kamran Yousaf (Accounts)', when: 'Today 8:45', status: 'Pending' },
-  { id: 'ap3', type: 'Fine waiver', title: 'Late fine waiver Rs. 450 · Bilal Ahmed', sub: 'Reason: father hospitalised in October', by: 'Kamran Yousaf (Accounts)', when: 'Yesterday', status: 'Pending' },
-  { id: 'ap4', type: 'Leave', title: 'Casual leave · Faisal Nadeem', sub: '22 Oct · 1 day · 6 casual left', by: 'Faisal Nadeem (Teacher)', when: 'Yesterday', status: 'Pending' },
-  { id: 'ap5', type: 'Result', title: 'Publish mid-term results · Class 5', sub: 'All marks entered and locked', by: 'Tariq Mehmood (Exam)', when: 'Mon', status: 'Pending' },
-  { id: 'ap6', type: 'Payroll', title: 'Payroll September 2026', sub: '102 employees · Rs. 6,284,300 net', by: 'Kamran Yousaf (Accounts)', when: '1 Oct', status: 'Approved' },
-  { id: 'ap7', type: 'Attendance correction', title: 'Attendance correction · Class 5-A · 21 Oct', sub: 'Hamza Ali: Absent → Late', by: 'Sadia Anwar (Teacher)', when: 'Today 10:40', status: 'Pending' },
-];
+// Approvals made in this session only; the inbox itself comes from the server.
+const APPROVALS_SEED: Approval[] = [];
 
 export function useApprovals() {
   return useShared<Approval[]>('admin.approvals', APPROVALS_SEED);
@@ -276,13 +273,8 @@ export function requestApproval(a: Omit<Approval, 'id' | 'status' | 'when'>) {
 
 export type AuditEntry = { id: string; when: string; user: string; action: string; detail: string };
 
-const AUDIT_SEED: AuditEntry[] = [
-  { id: 'au1', when: 'Today 10:42', user: 'Sadia Anwar', action: 'Attendance', detail: 'Class 5-A marked · 26 P, 1 A, 1 L, 2 LV' },
-  { id: 'au2', when: 'Today 9:58', user: 'Kamran Yousaf', action: 'Fee collection', detail: 'Receipt R-26-000611 · Rs. 8,500 · cash' },
-  { id: 'au3', when: 'Today 9:10', user: 'Saba Noreen', action: 'Admission', detail: 'Rayan Malik sent for approval' },
-  { id: 'au4', when: 'Yesterday 16:20', user: 'Nadeem Akhtar', action: 'Settings', detail: 'Late fine changed: Rs. 40 → Rs. 50 per day (old → new)' },
-  { id: 'au5', when: 'Yesterday 8:02', user: 'Rabia Aslam', action: 'Login', detail: 'Login from Chrome · Windows · 39.45.12.8' },
-];
+// Changes made in this session only; the audit log itself comes from the server.
+const AUDIT_SEED: AuditEntry[] = [];
 
 export function useAudit() {
   return useShared<AuditEntry[]>('admin.audit', AUDIT_SEED);

@@ -23,9 +23,7 @@ import {
   Duty,
   ExamType,
   GradeBand,
-  RESULT_SUBJECTS,
   ROOMS,
-  TEACHERS,
   TIMES,
   examDays,
   useDuties,
@@ -311,7 +309,7 @@ export function AdminDateSheet(_: ScreenProps) {
           <NoApiBanner what="Publishing the date sheet to the parent and student apps" />
           <FormSheet visible={edit !== null} onClose={() => setEdit(null)} title={edit === 'new' ? 'Add paper' : 'Edit paper'} onSubmit={save}>
             <PickerField label="Class" value={form.cls} options={classes.names} onChange={v => setForm(p => ({ ...p, cls: v }))} />
-            <PickerField label="Subject" value={form.subject} options={subjects.length ? subjects : RESULT_SUBJECTS.map(x => x.name)} onChange={v => setForm(p => ({ ...p, subject: v }))} />
+            <PickerField label="Subject" value={form.subject} options={subjects} onChange={v => setForm(p => ({ ...p, subject: v }))} />
             <PickerField label="Date" value={form.date} options={days} onChange={v => setForm(p => ({ ...p, date: v }))} />
             <PickerField label="Time" value={form.time} options={TIMES} onChange={v => setForm(p => ({ ...p, time: v }))} />
           </FormSheet>
@@ -385,7 +383,7 @@ export function AdminInvigilation(_: ScreenProps) {
               setEdit(null);
             }}
           >
-            <PickerField label="Invigilator" value={teacher} options={teachers.length ? teachers : TEACHERS} onChange={setTeacher} />
+            <PickerField label="Invigilator" value={teacher} options={teachers} onChange={setTeacher} />
           </FormSheet>
         </>
       }

@@ -39,7 +39,6 @@ import { useSession } from '../../store';
 import { useI18n } from '../../i18n';
 import {
   ALL_CAMPUSES,
-  CAMPUSES,
   roleInfo,
   useAdminSession,
   useCampus,
@@ -48,13 +47,10 @@ import {
 import { useApi, invalidate } from '../../api/hooks';
 import { updateSession, useApiSession } from '../../api/session';
 import { webA } from '../../api/webA';
-import { Empty, Loading, NoApiBanner, QueryView } from '../../components/states';
+import { Empty, Loading, NotAvailable, QueryView } from '../../components/states';
 import { Logo, SchoolCodeField, usePasswordLogin } from '../auth';
 import { useAccess } from './menu';
 import { AdminReportsCenter } from './reports';
-
-const fmtM = (n: number) =>
-  n >= 1000000 ? `Rs. ${(n / 1000000).toFixed(2)}M` : `Rs. ${n.toLocaleString('en-US')}`;
 
 // Opens a module only if the signed-in role may see it.
 export function useOpen() {
@@ -212,6 +208,32 @@ const WEB_ROUTES: Record<string, string> = {
 };
 const WEB_ROUTE_PARAMS: Record<string, Record<string, unknown>> = { '/attendance': { id: 'r12' } };
 
+// New admissions per month, counted from the real students' admission dates.
+function AdmissionsTrend() {
+  const open = useOpen();
+  const q = useApi('adm:students:trend', () => webA.students({ page: 1, pageSize: 1000 }));
+  const months: Array<{ key: string; label: string }> = [];
+  const now = new Date();
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push({ key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`, label: d.toLocaleDateString('en-GB', { month: 'short' }) });
+  }
+  const counts = months.map(m => (q.data?.items ?? []).filter(st => (st.admissionDate || '').startsWith(m.key)).length);
+  return (
+    <Card title="Admissions trend" action={{ label: 'Report', onPress: () => open('AdminReport', { id: 'r2' }) }}>
+      <QueryView q={q}>
+        {() =>
+          counts.some(n => n > 0) ? (
+            <BarChart data={months.map((m, i) => ({ label: m.label, value: counts[i], highlight: i === months.length - 1 }))} />
+          ) : (
+            <Empty text="No admissions in the last six months." />
+          )
+        }
+      </QueryView>
+    </Card>
+  );
+}
+
 function AdminDashboard() {
   const [role] = useStaffRole();
   const open = useOpen();
@@ -219,7 +241,8 @@ function AdminDashboard() {
   const dash = useApi('adm:dashboard', webA.dashboard);
   const approvals = useApi(role === 'owner' || role === 'principal' ? 'adm:approvals' : null, webA.approvals);
   const info = roleInfo(role);
-  const name = session?.user.name ?? info.user;
+  const name = session?.user.name || info.label;
+  const today = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
   const go = (route?: string) => {
     const app = route ? WEB_ROUTES[route] : undefined;
     if (app) {
@@ -235,7 +258,7 @@ function AdminDashboard() {
   return (
     <Screen
       title={`Assalam o Alaikum, ${name.split(' ')[0]}`}
-      subtitle={`${info.label} · ${dash.data?.greeting.replace(/^Welcome\.\s*/, '') ?? ''}`}
+      subtitle={`${info.label} · ${today}`}
       refreshing={dash.refreshing}
       onRefresh={refresh}
       right={
@@ -320,43 +343,11 @@ function AdminDashboard() {
         </Card>
       ) : null}
 
-      {role === 'owner' ? (
-        <Card title="Campus comparison" action={{ label: 'Report', onPress: () => open('AdminReport', { id: 'r19' }) }}>
-          <NoApiBanner what="Per-campus figures" />
-          <BarChart
-            data={CAMPUSES.map(c => ({ label: c.name.split(' ')[0], value: Math.round((c.collection / c.expected) * 100), highlight: true }))}
-            format={v => `${v}%`}
-          />
-          {CAMPUSES.map((c, i) => (
-            <ListRow
-              key={c.id}
-              icon={Building}
-              title={c.name}
-              subtitle={`${c.strength} students · ${c.attendance}% attendance · expenses ${fmtM(c.expenses)}`}
-              right={<Text style={s.amount}>{fmtM(c.collection)}</Text>}
-              onPress={() => open('AdminCampuses')}
-              last={i === CAMPUSES.length - 1}
-            />
-          ))}
-        </Card>
+      {role === 'owner' && (session?.campuses.length ?? 0) > 1 ? (
+        <NotAvailable what="Campus comparison" detail="Per-campus collection and attendance figures are not available from the school server yet." />
       ) : null}
 
-      {role === 'owner' || role === 'principal' || role === 'frontdesk' ? (
-        <Card title="Admissions trend" action={{ label: 'Report', onPress: () => open('AdminReport', { id: 'r2' }) }}>
-          <NoApiBanner what="Monthly admissions" />
-          <BarChart
-            data={[
-              { label: 'Apr', value: 142 },
-              { label: 'May', value: 64 },
-              { label: 'Jun', value: 18 },
-              { label: 'Jul', value: 22 },
-              { label: 'Aug', value: 57 },
-              { label: 'Sep', value: 31 },
-              { label: 'Oct', value: 24, highlight: true },
-            ]}
-          />
-        </Card>
-      ) : null}
+      {role === 'owner' || role === 'principal' || role === 'frontdesk' ? <AdmissionsTrend /> : null}
     </Screen>
   );
 }

@@ -104,6 +104,25 @@ const common: Record<string, string> = {
   'Downloaded (demo)': 'ڈاؤن لوڈ ہو گیا (ڈیمو)',
   'Sent (demo)': 'بھیج دیا گیا (ڈیمو)',
 
+  // School code and server states
+  'School code': 'اسکول کوڈ',
+  'Your school code': 'آپ کے اسکول کا کوڈ',
+  'Enter your school code': 'اپنے اسکول کا کوڈ درج کریں',
+  'Checking school code…': 'اسکول کوڈ چیک ہو رہا ہے…',
+  'Ask your school office for the school code.': 'اسکول کوڈ اپنے اسکول کے دفتر سے پوچھیں۔',
+  'No active school has this code. Check it with your school office.':
+    'اس کوڈ کا کوئی فعال اسکول نہیں۔ اپنے اسکول کے دفتر سے تصدیق کریں۔',
+  'School app': 'اسکول ایپ',
+  'No notices yet.': 'ابھی کوئی نوٹس نہیں۔',
+  'Phone push alerts start once the school turns them on.':
+    'فون پر الرٹس اسکول کے فعال کرنے کے بعد آئیں گے۔',
+  'This is not available from the school server yet. It will appear here once the school turns it on.':
+    'یہ ابھی اسکول سرور پر دستیاب نہیں۔ اسکول کے فعال کرنے کے بعد یہاں نظر آئے گا۔',
+  'Loading…': 'لوڈ ہو رہا ہے…',
+  "Couldn't load": 'لوڈ نہیں ہو سکا',
+  'Try again': 'دوبارہ کوشش کریں',
+  'Nothing here yet.': 'ابھی یہاں کچھ نہیں۔',
+
   // Fee hold on admit card / report card
   'Admit card is on hold': 'ایڈمٹ کارڈ روک دیا گیا ہے',
   'Report card is on hold': 'رپورٹ کارڈ روک دیا گیا ہے',

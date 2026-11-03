@@ -1,28 +1,26 @@
 import { ScreenMap } from '../../../navigation';
-import { inventoryScreens as inv } from './inventory';
-import { libraryScreens as lib } from './library';
 import { AdminAssetsLive, AdminItemsLive, AdminLibraryLive, AdminPurchasesLive, AdminSalesLive } from './live';
-import { sampleScreen } from '../accounts/live-kit';
+import { notAvailableScreen as na } from '../accounts/live-kit';
 
-// Contract routes open the server-backed screens; the earlier sample screens
-// stay reachable as "tools" for rules the server has no API for yet.
+// Every route shows server data. Where the server has no API yet the screen
+// says so plainly; no sample data is ever shown.
 export const adminStoreScreens: ScreenMap = {
   AdminItems: AdminItemsLive,
   AdminPurchases: AdminPurchasesLive,
-  AdminPurchaseDetail: sampleScreen(inv.AdminPurchaseDetail, 'goods received'),
+  AdminPurchaseDetail: na('Purchase order', 'Goods received'),
   AdminSales: AdminSalesLive,
-  AdminCanteenPos: sampleScreen(inv.AdminCanteenPos, 'canteen POS'),
-  AdminCanteenWallets: sampleScreen(inv.AdminCanteenWallets, 'student wallets'),
-  AdminStock: sampleScreen(inv.AdminStock, 'stock adjustments and write-offs'),
-  AdminStaffIssues: sampleScreen(inv.AdminStaffIssues, 'issue and return to staff'),
+  AdminCanteenPos: na('Canteen POS', 'Canteen point of sale'),
+  AdminCanteenWallets: na('Student wallets', 'Student canteen wallets'),
+  AdminStock: na('Stock', 'Stock in hand, adjustments and write-offs'),
+  AdminStaffIssues: na('Staff issues', 'Issue and return to staff'),
   AdminAssets: AdminAssetsLive,
   AdminLibrary: AdminLibraryLive,
-  AdminLibraryIssue: sampleScreen(lib.AdminLibraryIssue, 'barcode issue and renewal'),
-  AdminBookDetail: sampleScreen(lib.AdminBookDetail, 'barcode labels'),
-  AdminLibraryMember: sampleScreen(lib.AdminLibraryMember, 'member view'),
-  AdminItemsTools: sampleScreen(inv.AdminItems, 'variants and suppliers'),
-  AdminPurchasesTools: sampleScreen(inv.AdminPurchases, 'purchase orders with goods received'),
-  AdminSalesTools: sampleScreen(inv.AdminSales, 'sales added to fee voucher'),
-  AdminAssetsTools: sampleScreen(inv.AdminAssets, 'asset moves'),
-  AdminLibraryTools: sampleScreen(lib.AdminLibrary, 'barcode library'),
+  AdminLibraryIssue: na('Barcode issue', 'Barcode issue and renewal'),
+  AdminBookDetail: na('Book', 'Barcode labels'),
+  AdminLibraryMember: na('Library member', 'Member view'),
+  AdminItemsTools: na('Variants & suppliers', 'Item variants and suppliers'),
+  AdminPurchasesTools: na('Goods received', 'Purchase orders with goods received'),
+  AdminSalesTools: na('Sales to voucher', 'Sales added to the fee voucher'),
+  AdminAssetsTools: na('Asset moves', 'Asset moves'),
+  AdminLibraryTools: na('Barcode library', 'Barcode labels, renewals and member view'),
 };

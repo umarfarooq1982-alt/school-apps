@@ -1,6 +1,6 @@
 // Accounts screens backed by the school server (/api/web/fees, payroll,
-// modules/expenses, modules/online-pay). Rules the server does not cover stay
-// on the sample "tools" screens linked from here.
+// modules/expenses, modules/online-pay). Parts the server does not cover show a
+// "not available" state.
 import React, { useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
 import { Banknote, Building, CalendarDays, CreditCard, FileSpreadsheet, Lock, Plus, Printer, Receipt, Search, UserMinus, Wallet } from 'lucide-react-native';
@@ -115,7 +115,7 @@ export function AdminFeeStructureLive(_: ScreenProps) {
   };
 
   return (
-    <LiveScreen title="Fee heads & structure" subtitle="Class-wise amount per head for this session" q={heads} toolsRoute="AdminFeeStructureTools" exportTitle="Fee structure">
+    <LiveScreen title="Fee heads & structure" subtitle="Class-wise amount per head for this session" q={heads} exportTitle="Fee structure">
       <Card title="Fee heads" action={{ label: 'Add head', onPress: () => (readOnly ? toast('Read-only session') : setHeadOpen(true)) }}>
         <QueryView q={heads} isEmpty={d => !d.length} emptyText="No fee heads yet.">
           {d =>
@@ -246,7 +246,7 @@ export function AdminVoucherGenerationLive(_: ScreenProps) {
   };
 
   return (
-    <LiveScreen title="Voucher generation" subtitle="Arrears, discounts, transport and store sales are added by the server" toolsRoute="AdminVoucherGenerationTools">
+    <LiveScreen title="Voucher generation" subtitle="Arrears, discounts, transport and store sales are added by the server">
       {readOnly ? <InfoBanner tone="warn" icon={Lock} text="This session is closed (read-only)." /> : null}
       <PickerField label="Month" value={month} options={monthsAround()} onChange={setMonth} />
       <Card title="Bulk monthly · whole campus">
@@ -287,7 +287,7 @@ export function AdminVoucherPrintLive(_: ScreenProps) {
       title="Vouchers · print & send"
       subtitle="3-copy voucher with QR; tap a voucher to print or send"
       q={q}
-      toolsRoute="AdminVoucherPrintTools"
+     
       right={
         <Button
           label="CSV"
@@ -336,12 +336,12 @@ export function AdminVoucherPrintLive(_: ScreenProps) {
   );
 }
 
-// Live voucher detail for numeric ids; sample ids fall back to the sample screen.
-export function makeVoucherDetail(Sample: React.ComponentType<ScreenProps>) {
+// Voucher detail from the server; a missing or invalid id shows the fallback.
+export function makeVoucherDetail(Fallback: React.ComponentType<ScreenProps>) {
   return function AdminVoucherDetailLive(props: ScreenProps) {
     const id = String(useParam('id', ''));
     if (!/^\d+$/.test(id)) {
-      return <Sample {...props} />;
+      return <Fallback {...props} />;
     }
     return <VoucherDetail id={id} />;
   };
@@ -439,7 +439,7 @@ export function AdminFeeCounterLive(_: ScreenProps) {
   };
 
   return (
-    <LiveScreen title="Fee collection counter" subtitle="Find a voucher by number or QR; full or partial payment" q={summary} toolsRoute="AdminFeeCounterTools">
+    <LiveScreen title="Fee collection counter" subtitle="Find a voucher by number or QR; full or partial payment" q={summary}>
       <QueryView q={summary}>
         {s => (
           <KpiGrid>
@@ -511,7 +511,7 @@ export function AdminDefaultersLive(_: ScreenProps) {
   );
   const total = list.reduce((a, d) => a + d.amount, 0);
   return (
-    <LiveScreen title="Defaulters" subtitle="Students with unpaid or partial vouchers" q={q} toolsRoute="AdminDefaultersTools" toolsLabel="Reminders, installments & holds (sample)" exportTitle="Defaulters">
+    <LiveScreen title="Defaulters" subtitle="Students with unpaid or partial vouchers" q={q} exportTitle="Defaulters">
       <KpiGrid>
         <Kpi label="Defaulters" value={String(list.length)} tone="danger" />
         <Kpi label="Outstanding" value={`Rs. ${total.toLocaleString('en-US')}`} tone="danger" />
@@ -639,7 +639,7 @@ export function AdminDiscountsLive(_: ScreenProps) {
       title="Discounts"
       subtitle={`Requests go to approval · combined cap ${rules.maxDiscountPct}%`}
       q={q}
-      toolsRoute="AdminDiscountsTools"
+     
       exportTitle="Discounts"
       footer={<Button label="Request discount" icon={Plus} onPress={() => setOpen(true)} />}
     >
@@ -684,7 +684,7 @@ export function AdminCashClosingLive(_: ScreenProps) {
   const today = todayIso();
   const done = (q.data ?? []).some(c => String(c.close_date).slice(0, 10) === today);
   return (
-    <LiveScreen title="Cash closing" subtitle="Cashier closes the day and hands over to Accounts" q={q} toolsRoute="AdminCashClosingTools" toolsLabel="Count cash by notes & flag differences (sample)">
+    <LiveScreen title="Cash closing" subtitle="Cashier closes the day and hands over to Accounts" q={q}>
       <QueryView q={counter}>
         {s => (
           <KpiGrid>
@@ -741,7 +741,7 @@ export function AdminOnlinePaymentsLive(_: ScreenProps) {
   const [tab, setTab] = useState('All');
   const list = (q.data ?? []).filter(r => tab === 'All' || String(r.status).toLowerCase() === tab.toLowerCase());
   return (
-    <LiveScreen title="Online payments" subtitle="Gateway transactions started from the parent app" q={q} toolsRoute="AdminOnlinePaymentsTools" toolsLabel="Reconciliation (sample)">
+    <LiveScreen title="Online payments" subtitle="Gateway transactions started from the parent app" q={q}>
       <InfoBanner text="A voucher is marked paid only when the gateway confirms. JazzCash, Easypaisa and 1Link keys are not enabled on the server yet." />
       <Chips options={['All', 'Unavailable', 'Pending', 'Paid', 'Failed']} value={tab} onChange={setTab} />
       <QueryView q={q} isEmpty={() => !list.length} emptyText="No online payments yet.">
@@ -794,7 +794,7 @@ export function AdminExpensesLive(_: ScreenProps) {
       ]}
       toBody={v => (Number(v.amount) > 0 ? { title: v.title.trim(), category: v.category || 'Misc', amount: Number(v.amount), date: v.date } : 'Amount must be more than 0')}
       addLabel="Add expense"
-      toolsRoute="AdminExpensesTools"
+     
       renderHeader={rows => (
         <KpiGrid>
           <Kpi label="Entries" value={String(rows.length)} />
@@ -816,7 +816,7 @@ export function AdminPayrollLive(_: ScreenProps) {
   const total = list.reduce((a, s) => a + num(s.net), 0);
   const locked = list.some(s => String(s.status).toLowerCase() === 'approved' || String(s.status).toLowerCase() === 'locked');
   return (
-    <LiveScreen title="Payroll processing" subtitle="Monthly run from salary structures" q={q} toolsRoute="AdminPayrollTools" toolsLabel="Deductions, approval, lock & bank sheet (sample)">
+    <LiveScreen title="Payroll processing" subtitle="Monthly run from salary structures" q={q}>
       <PickerField label="Month" value={month} options={monthsAround()} onChange={setMonth} />
       <KpiGrid>
         <Kpi label="Slips" value={String(list.length)} />

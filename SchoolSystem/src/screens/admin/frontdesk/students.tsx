@@ -51,9 +51,6 @@ import { ScreenProps, useNav, useParam } from '../../../navigation';
 import {
   ALL_CAMPUSES,
   AdminStudent,
-  CAMPUSES,
-  CLASSES,
-  SECTIONS,
   campusName,
   logAudit,
   requestApproval,
@@ -63,7 +60,6 @@ import {
   useStaffRole,
 } from '../../../data/admin';
 import {
-  CERT_FEE,
   CERT_TYPES,
   CertType,
   nextSerial,
@@ -84,7 +80,8 @@ import { useOpen } from '../core';
 import { invalidate, useApi } from '../../../api/hooks';
 import { Student360, webA } from '../../../api/webA';
 import { errorMessage } from '../../../api/client';
-import { useApiSession } from '../../../api/session';
+import { getSession, useApiSession } from '../../../api/session';
+import { useSchoolName } from '../../../api/tenant';
 import { NoApiBanner, QueryView } from '../../../components/states';
 import { ReadOnlyBanner, statusTone, useGuard } from './util';
 
@@ -101,6 +98,8 @@ function useStudents() {
 
 // ---------- Students ----------
 
+const uniq = (l: string[]) => Array.from(new Set(l.filter(Boolean))).sort();
+
 export function AdminStudents(_: ScreenProps) {
   const nav = useNav();
   const [campus] = useCampus();
@@ -113,9 +112,9 @@ export function AdminStudents(_: ScreenProps) {
       keyOf={s => s.id}
       searchText={s => `${s.name} ${s.gr} ${s.father} ${s.fatherCnic} ${s.mobile}`}
       filters={[
-        { label: 'Class', options: ['All classes', ...CLASSES], get: s => s.className },
-        { label: 'Section', options: ['All sections', ...SECTIONS], get: s => s.section },
-        { label: 'Campus', options: ['All campuses', ...CAMPUSES.map(c => c.name)], get: s => campusName(s.campus) },
+        { label: 'Class', options: ['All classes', ...uniq(students.map(s => s.className))], get: s => s.className },
+        { label: 'Section', options: ['All sections', ...uniq(students.map(s => s.section))], get: s => s.section },
+        { label: 'Campus', options: ['All campuses', ...(getSession()?.campuses ?? []).map(c => c.name)], get: s => campusName(s.campus) },
         { label: 'Status', options: ['All statuses', ...STATUSES], get: s => s.status },
       ]}
       renderItem={(s, last) => (
@@ -410,7 +409,7 @@ export function AdminCertificates(_: ScreenProps) {
     logAudit('Certificate', `${r.type} certificate ${serial} issued to ${stu?.name}`);
     toast(
       r.from === 'Parent portal'
-        ? `${serial} issued. Fee ${formatRs(CERT_FEE[r.type])} added to the next voucher.`
+        ? `${serial} issued. Add the certificate fee to the next voucher from Accounts.`
         : `${serial} issued with QR verification.`,
     );
   };
@@ -462,6 +461,7 @@ export function AdminCertificates(_: ScreenProps) {
 }
 
 export function AdminCertificateIssue(_: ScreenProps) {
+  const schoolName = useSchoolName();
   const nav = useNav();
   const { guard } = useGuard();
   const [, setReqs] = useCertRequests();
@@ -516,7 +516,7 @@ export function AdminCertificateIssue(_: ScreenProps) {
       <Field label="Needed for" value={purpose} onChangeText={setPurpose} placeholder="e.g. Visa application" />
       {blocked ? <InfoBanner tone="danger" text={`${formatRs(stu.due)} is outstanding. A leaving certificate needs the dues cleared or Principal approval.`} /> : null}
       <Card>
-        <Text style={st.certTitle}>Bright Future School</Text>
+        <Text style={st.certTitle}>{schoolName}</Text>
         <Text style={st.certSub}>{type} Certificate · Serial on issue</Text>
         <Text style={st.certBody}>
           This is to certify that {stu.name}, {stu.gender === 'F' ? 'daughter' : 'son'} of {stu.father}, GR No. {stu.gr}, is a
@@ -578,7 +578,7 @@ export function AdminIdCards(_: ScreenProps) {
           <View style={st.flex}>
             <Text style={adminStyles.bold}>{x.name}</Text>
             <Text style={adminStyles.small}>{x.gr} · {x.className}-{x.section}</Text>
-            <Text style={adminStyles.small}>Valid till 31 Mar 2027</Text>
+            <Text style={adminStyles.small}>Session {getSession()?.sessions.find(ss => ss.isCurrent)?.name ?? '—'}</Text>
           </View>
           <QRCode value={x.gr} size={60} />
         </Card>
@@ -632,7 +632,7 @@ export function AdminVisitors(_: ScreenProps) {
             <Field label="Visitor name" value={f.name} onChangeText={v => setF(p => ({ ...p, name: v }))} />
             <Field label="CNIC" value={f.cnic} keyboardType="numbers-and-punctuation" onChangeText={v => setF(p => ({ ...p, cnic: v }))} />
             <Field label="Purpose" value={f.purpose} onChangeText={v => setF(p => ({ ...p, purpose: v }))} />
-            <PickerField label="Person to meet" value={f.met} options={['Front Desk', 'Principal', 'Accounts', 'Class teacher 5-A', 'HR', 'Store']} onChange={v => setF(p => ({ ...p, met: v }))} />
+            <PickerField label="Person to meet" value={f.met} options={['Front Desk', 'Principal', 'Accounts', 'Class teacher', 'HR', 'Store']} onChange={v => setF(p => ({ ...p, met: v }))} />
           </FormSheet>
         </>
       }
